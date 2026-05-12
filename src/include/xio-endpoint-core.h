@@ -89,6 +89,12 @@ struct XioEndpointConfig {
 
   unsigned long long int* startTimes = nullptr; /**< Per-op start times. */
   unsigned long long int* endTimes = nullptr;   /**< Per-op end times. */
+  /** Optional NVMe per-op trace (length iterations * numThreads). */
+  uint64_t* verboseLbas = nullptr;
+  /** Bytes transferred per op (same length as verboseLbas). */
+  uint32_t* verboseXferBytes = nullptr;
+  /** 0 = write, 1 = read (same length as verboseLbas). */
+  uint8_t* verboseRwFlags = nullptr;
   XioTimingStats* timingStats = nullptr;        /**< Aggregate timing. */
   XioSubstepStats* substepStats = nullptr;      /**< Hot-path breakdown. */
 

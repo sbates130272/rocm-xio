@@ -188,7 +188,8 @@ __host__ __device__ void ringDoorbell(uint16_t value,
  *                 is mixed into the hash so that different
  *                 seed values produce different LBA
  *                 sequences across runs.
- * @return Calculated LBA address
+ * @return Calculated LBA address (sequential mode keeps each transfer inside
+ *         lbaRangeLbas when that bound is set).
  */
 static __host__ __device__ uint64_t getRandomLba(unsigned op_index,
                                                  uint16_t cmd_id,
@@ -208,12 +209,28 @@ static __host__ __device__ uint64_t getRandomLba(unsigned op_index,
                          : 1;
     return ioParams.baseLba + (seed % max_lba);
   } else {
-    // Sequential access mode
+    // Sequential access mode: each I/O covers `blocks` consecutive LBAs.
+    // The starting LBA offset must satisfy start + blocks - 1 < base + range,
+    // i.e. offset <= lbaRangeLbas - blocks (when lbaRangeLbas >= blocks).
+    // Using % lbaRangeLbas on (op_index * blocks) alone can pick a start whose
+    // tail extends past the end of the namespace (e.g. range 100 LBAs,
+    // blocks 64, offset 64 -> LBAs 64..127), which breaks verify and data
+    // integrity. Mirror the random path by wrapping in the number of valid
+    // starting offsets (lbaRangeLbas - blocks + 1).
+    const uint64_t span = static_cast<uint64_t>(blocks);
     if (ioParams.lbaRangeLbas > 0) {
-      return ioParams.baseLba + ((op_index * blocks) % ioParams.lbaRangeLbas);
-    } else {
-      return ioParams.baseLba + (op_index * blocks);
+      const uint64_t R = ioParams.lbaRangeLbas;
+      if (R < span) {
+        return ioParams.baseLba;
+      }
+      const uint64_t nStarts = R - span + 1;
+      const uint64_t stride =
+        static_cast<uint64_t>(op_index) * span;
+      const uint64_t off = stride % nStarts;
+      return ioParams.baseLba + off;
     }
+    return ioParams.baseLba +
+           (static_cast<uint64_t>(op_index) * span);
   }
 }
 
@@ -432,6 +449,13 @@ __device__ static void driveEndpointSingle(
 
       if (!ioParams.infiniteMode && config.startTimes != nullptr) {
         config.startTimes[op_idx] = wall_clock64();
+        if (config.verboseLbas != nullptr) {
+          config.verboseLbas[op_idx] = lba;
+          config.verboseXferBytes[op_idx] =
+            (uint32_t)((transfer_size > 0xFFFFFFFFULL) ? 0xFFFFFFFFU
+                                                       : (uint32_t)transfer_size);
+          config.verboseRwFlags[op_idx] = is_read_op ? 1U : 0U;
+        }
       } else if (useBatchTiming && b < kMaxTimedBatch) {
         batchStartTimes[b] = wall_clock64();
       }
@@ -1008,6 +1032,8 @@ __host__ std::string validateConfig(nvmeEpConfig* config) {
              "batching intermixes write and read ops, "
              "preventing correct read-back verification)";
   }
+  if (config->injectVerifyFail && !config->verify)
+    return "--inject-verify-fail requires --verify";
 
   // Detect LBA size from controller/namespace
   unsigned detected_lba_size = 0;
@@ -1018,6 +1044,45 @@ __host__ std::string validateConfig(nvmeEpConfig* config) {
            std::string(strerror(-ret));
   }
   config->ioParams.lbaSize = detected_lba_size;
+
+  // Single-command transfer must fit controller MDTS (Identify Controller).
+  // Common failure: 4 KiB LBAs x 64 blocks = 256 KiB exceeds MDTS on drives
+  // that report 128 KiB max even though random LBA selection is valid.
+  {
+    config->mdtsIdentified = false;
+    config->mdtsMaxXferBytes = 0;
+    const uint64_t xfer_req =
+      (uint64_t)config->ioParams.lbasPerIo *
+      (uint64_t)config->ioParams.lbaSize;
+    uint64_t mdts_max = 0;
+    const int mdret =
+      queryMdtsMaxXferBytes(config->controller.c_str(),
+                            config->ioParams.nsid, &mdts_max);
+    if (mdret != 0) {
+      ROCXIO_LOG_WARN("Could not query MDTS (%s); skipping MDTS vs "
+                      "transfer-size check.\n",
+                      strerror(-mdret));
+    } else {
+      config->mdtsIdentified = true;
+      config->mdtsMaxXferBytes = mdts_max;
+      if (mdts_max > 0 && xfer_req > mdts_max) {
+        const uint64_t lba_b = (uint64_t)config->ioParams.lbaSize;
+        const uint64_t max_lbas = lba_b ? (mdts_max / lba_b) : 0;
+        char buf[512];
+        snprintf(buf, sizeof(buf),
+                 "Single-command transfer is %llu bytes (%u LBAs x %u bytes/LBA) "
+                 "but Identify Controller MDTS limits each NVM read/write to "
+                 "%llu bytes (at most %llu LBAs at this LBA size). "
+                 "Set --lbas-per-io to at most %llu.",
+                 (unsigned long long)xfer_req,
+                 (unsigned)config->ioParams.lbasPerIo,
+                 (unsigned)config->ioParams.lbaSize,
+                 (unsigned long long)mdts_max, (unsigned long long)max_lbas,
+                 (unsigned long long)max_lbas);
+        return std::string(buf);
+      }
+    }
+  }
 
   // Detect PCI MMIO bridge BDF if --pci-mmio-bridge is set
   if (config->doorbellParams.usePciMmioBridge) {
@@ -1082,6 +1147,200 @@ __host__ std::string validateConfig(nvmeEpConfig* config) {
 
   return std::string();
 }
+
+#ifndef __HIP_DEVICE_COMPILE__
+
+/**
+ * When ROCXIO_NVME_DUMP_PRP is set (any non-empty value), log PRP1/PRP2 and
+ * PRP list slot contents for the first N batch indices (N from
+ * ROCXIO_NVME_DUMP_PRP_BATCH, default 4). Uses the same calculatePrps() path as
+ * the device kernel with host-writable scratch for list entries.
+ */
+static __host__ void dumpNvmeDataPrpIfRequested(
+    uint16_t queue_id, const nvme_ep::nvmeBufferParams& bp, uint32_t lbas_per_io,
+    uint32_t lba_size, uint32_t eff_batch, uint32_t prp_stride_per_cmd,
+    uint64_t prp_pool_dma, bool dump_reads, bool dump_writes) {
+  const char* flag = getenv("ROCXIO_NVME_DUMP_PRP");
+  if (!flag || !flag[0])
+    return;
+
+  int max_b = xio::getEnvInt("ROCXIO_NVME_DUMP_PRP_BATCH", 4);
+  if (max_b < 1)
+    max_b = 1;
+  if (max_b > 256)
+    max_b = 256;
+
+  const uint64_t xfer64 =
+      (uint64_t)lbas_per_io * (uint64_t)lba_size;
+  if (xfer64 > 0xffffffffULL) {
+    ROCXIO_LOG_WARN("ROCXIO_NVME_DUMP_PRP: transfer size > 4GiB, "
+                    "skipping PRP dump for queue %u\n",
+                    (unsigned)queue_id);
+    return;
+  }
+  const uint32_t xfer_u32 = (uint32_t)xfer64;
+
+  constexpr uint32_t kMaxList = NVME_PAGE_SIZE / sizeof(uint64_t);
+  uint64_t scratch[kMaxList];
+
+  ROCXIO_LOG_INFO("ROCXIO_NVME_DUMP_PRP queue=%u xfer=%u bytes "
+                  "prp_stride=%u prp_pool_dma=0x%016llx eff_batch=%u\n",
+                  (unsigned)queue_id, xfer_u32, prp_stride_per_cmd,
+                  (unsigned long long)prp_pool_dma, eff_batch);
+
+  auto list_entry_count = [](uint64_t buffer_addr,
+                             uint32_t buffer_size) -> uint32_t {
+    constexpr uint32_t kMax = NVME_PAGE_SIZE / sizeof(uint64_t);
+    uint64_t offset_in_page = buffer_addr & (NVME_PAGE_SIZE - 1);
+    uint64_t first_page_size = NVME_PAGE_SIZE - offset_in_page;
+    if (buffer_size <= first_page_size)
+      return 0;
+    uint32_t remaining = (uint32_t)(buffer_size - first_page_size);
+    uint32_t num_remaining =
+        (remaining + NVME_PAGE_SIZE - 1) / NVME_PAGE_SIZE;
+    if (num_remaining > kMax)
+      num_remaining = kMax;
+    if (num_remaining <= 1)
+      return 0;
+    return num_remaining;
+  };
+
+  auto dump_direction = [&](const char* label, bool active,
+                            uint64_t buf_dma, const uint64_t* page_addrs) {
+    if (!active)
+      return;
+    uint32_t limit_b = eff_batch;
+    if (limit_b > (uint32_t)max_b)
+      limit_b = (uint32_t)max_b;
+    for (uint32_t b = 0; b < limit_b; b++) {
+      uint64_t buf_off = (uint64_t)b * xfer64;
+      if (buf_off + xfer64 > bp.bufferSize)
+        break;
+      const uint32_t prp_off = b * prp_stride_per_cmd;
+      const uint64_t prp_slot_dma =
+          prp_pool_dma ? prp_pool_dma + (uint64_t)prp_off * sizeof(uint64_t)
+                       : 0ULL;
+      const uint32_t page_off =
+          (uint32_t)(buf_off / (uint64_t)NVME_PAGE_SIZE);
+      const uint64_t intra_page_off = buf_off % (uint64_t)NVME_PAGE_SIZE;
+
+      uint64_t addr = 0;
+      if (page_addrs) {
+        addr = page_addrs[page_off] + intra_page_off;
+      } else if (buf_dma) {
+        addr = buf_dma + buf_off;
+      } else {
+        ROCXIO_LOG_WARN("ROCXIO_NVME_DUMP_PRP %s b=%u: no DMA base for "
+                        "PRP dump\n",
+                        label, b);
+        continue;
+      }
+
+      nvme_ep::sqeType tmp = {};
+      memset(scratch, 0, sizeof(scratch));
+      nvme_ep::calculatePrps(
+          addr, xfer_u32, &tmp,
+          (prp_stride_per_cmd != 0) ? scratch : nullptr, prp_slot_dma,
+          page_addrs, page_off);
+
+      const uint32_t list_entries = list_entry_count(addr, xfer_u32);
+      ROCXIO_LOG_INFO("  %s b=%u buf_off=0x%llx data_addr=0x%016llx "
+                      "prp1=0x%016llx prp2=0x%016llx list_entries=%u\n",
+                      label, b, (unsigned long long)buf_off,
+                      (unsigned long long)addr,
+                      (unsigned long long)tmp.dptr.prp.prp1,
+                      (unsigned long long)tmp.dptr.prp.prp2, list_entries);
+
+      if (list_entries > 0 && prp_stride_per_cmd != 0) {
+        for (uint32_t i = 0; i < list_entries; i++) {
+          ROCXIO_LOG_INFO("    prp_list[%u]=0x%016llx\n", i,
+                          (unsigned long long)scratch[i]);
+        }
+      }
+    }
+  };
+
+  dump_direction("read", dump_reads, bp.readBufferDma, bp.readPagePhysAddrs);
+  dump_direction("write", dump_writes, bp.writeBufferDma,
+                 bp.writePagePhysAddrs);
+}
+
+/**
+ * When ROCXIO_NVME_DUMP_VERIFY_MISMATCH is set, log actual vs expected bytes
+ * around the first verify failure (half-window from
+ * ROCXIO_NVME_DUMP_VERIFY_MISMATCH_HALF, default 32).
+ */
+static __host__ void dumpNvmeVerifyMismatchIfRequested(
+    unsigned queue_idx, size_t err_off, size_t verify_bytes,
+    const uint8_t* host_read_buf, uint64_t pattern_base_offset,
+    uint32_t block_size, uint32_t seed) {
+  const char* flag = getenv("ROCXIO_NVME_DUMP_VERIFY_MISMATCH");
+  if (!flag || !flag[0] || !host_read_buf || verify_bytes == 0)
+    return;
+  if (block_size == 0) {
+    ROCXIO_LOG_WARN("ROCXIO_NVME_DUMP_VERIFY_MISMATCH: block_size 0; "
+                    "skip dump\n");
+    return;
+  }
+  if (err_off >= verify_bytes) {
+    ROCXIO_LOG_WARN("ROCXIO_NVME_DUMP_VERIFY_MISMATCH: err_off %zu "
+                    "out of range (verify_bytes %zu)\n",
+                    err_off, verify_bytes);
+    return;
+  }
+
+  int half = xio::getEnvInt("ROCXIO_NVME_DUMP_VERIFY_MISMATCH_HALF", 32);
+  if (half < 1)
+    half = 1;
+  if (half > 2048)
+    half = 2048;
+
+  const size_t start =
+      err_off > (size_t)half ? err_off - (size_t)half : (size_t)0;
+  size_t end = err_off + (size_t)half + 1;
+  if (end > verify_bytes)
+    end = verify_bytes;
+
+  const uint8_t exp_at = xio::dataPatternExpectedByte(
+      pattern_base_offset, block_size, seed, err_off);
+  ROCXIO_LOG_WARN(
+      "ROCXIO_NVME_DUMP_VERIFY_MISMATCH queue=%u err_off=%zu "
+      "verify_bytes=%zu pattern_base_offset=%llu: "
+      "actual=0x%02x expected=0x%02x\n",
+      queue_idx, err_off, verify_bytes,
+      (unsigned long long)pattern_base_offset,
+      (unsigned)host_read_buf[err_off], (unsigned)exp_at);
+
+  ROCXIO_LOG_WARN(
+      "ROCXIO_NVME_DUMP_VERIFY_MISMATCH hex [%zu,%zu) "
+      "(ROCXIO_NVME_DUMP_VERIFY_MISMATCH_HALF=%d)\n",
+      start, end, half);
+
+  for (size_t row = start; row < end; row += 16) {
+    char line[400];
+    size_t n = 0;
+    n += snprintf(line + n, sizeof(line) - n, "  %06zu act ", row);
+    for (size_t c = row; c < row + 16 && c < end; c++)
+      n += snprintf(line + n, sizeof(line) - n, "%02x ",
+                    (unsigned)host_read_buf[c]);
+    n += snprintf(line + n, sizeof(line) - n, "| exp ");
+    for (size_t c = row; c < row + 16 && c < end; c++) {
+      const uint8_t e = xio::dataPatternExpectedByte(
+          pattern_base_offset, block_size, seed, c);
+      n += snprintf(line + n, sizeof(line) - n, "%02x ", (unsigned)e);
+    }
+    n += snprintf(line + n, sizeof(line) - n, "| xor ");
+    for (size_t c = row; c < row + 16 && c < end; c++) {
+      const uint8_t e = xio::dataPatternExpectedByte(
+          pattern_base_offset, block_size, seed, c);
+      n += snprintf(line + n, sizeof(line) - n, "%02x ",
+                    (unsigned)(host_read_buf[c] ^ e));
+    }
+    ROCXIO_LOG_WARN("%s\n", line);
+  }
+}
+
+#endif // !__HIP_DEVICE_COMPILE__
 
 /**
  * Run NVMe endpoint operations
@@ -1661,6 +1920,12 @@ __host__ hipError_t run(XioEndpointConfig* config) {
       goto cleanup;
     }
 
+    dumpNvmeDataPrpIfRequested(
+        qid, qBufParams, nvmeConfig->ioParams.lbasPerIo,
+        nvmeConfig->ioParams.lbaSize, effBatch, prpStridePerCmd,
+        prpPools[q].dma, nvmeConfig->ioParams.readIo != 0,
+        nvmeConfig->ioParams.writeIo != 0);
+
     // Keep backward compat: update nvmeConfig
     // with the first queue's info for single-queue
     if (q == 0) {
@@ -1739,17 +2004,56 @@ __host__ hipError_t run(XioEndpointConfig* config) {
         rbuf = host_rb;
       }
       if (rbuf) {
-        xio::DataPatternParams vp{
-          rbuf, verifyBytes, 0, ioParams.lbaSize, ioParams.lfsrSeed, nullptr};
+        size_t err_off = 0;
+        xio::DataPatternParams vp{rbuf,
+                                  verifyBytes,
+                                  0,
+                                  ioParams.lbaSize,
+                                  ioParams.lfsrSeed,
+                                  &err_off};
         if (xio::dataPattern(true, vp))
           config->verifyPass += static_cast<uint32_t>(
             nvmeConfig->ioParams.readIo);
-        else
+        else {
+          char mdts_ctx[192];
+          if (!nvmeConfig->mdtsIdentified) {
+            snprintf(mdts_ctx, sizeof(mdts_ctx),
+                     "Identify MDTS: not available (Identify Controller failed "
+                     "or was skipped)");
+          } else if (nvmeConfig->mdtsMaxXferBytes == 0) {
+            snprintf(mdts_ctx, sizeof(mdts_ctx),
+                     "Identify MDTS: no limit reported (MDTS field 0)");
+          } else {
+            snprintf(mdts_ctx, sizeof(mdts_ctx),
+                     "Identify MDTS max %llu bytes per NVM read/write command",
+                     (unsigned long long)nvmeConfig->mdtsMaxXferBytes);
+          }
+          ROCXIO_LOG_WARN(
+            "NVMe --verify: pattern mismatch at byte %zu of %zu "
+            "(queue %u). %s. If the command is within MDTS, this is often a "
+            "PRP / host DMA address translation issue for transfers spanning "
+            "multiple 4 KiB pages.\n",
+            err_off, verifyBytes, q, mdts_ctx);
+          dumpNvmeVerifyMismatchIfRequested(q, err_off, verifyBytes, rbuf, 0,
+                                            ioParams.lbaSize,
+                                            ioParams.lfsrSeed);
           config->verifyFail += static_cast<uint32_t>(
             nvmeConfig->ioParams.readIo);
+        }
       }
       free(host_rb);
     }
+    if (result == hipSuccess && config->verifyFail > 0)
+      result = hipErrorIllegalState;
+  }
+
+  if (result == hipSuccess && nvmeConfig->injectVerifyFail &&
+      nvmeConfig->verify && nvmeConfig->ioParams.readIo > 0 &&
+      nvmeConfig->ioParams.writeIo > 0) {
+    ROCXIO_LOG_WARN(
+      "NVMe: --inject-verify-fail forced non-zero exit (testing only)\n");
+    config->verifyFail += static_cast<uint32_t>(nvmeConfig->ioParams.readIo);
+    result = hipErrorIllegalState;
   }
 
   // ---- Aggregate per-queue timing stats ----
@@ -1954,7 +2258,7 @@ __host__ int queryLbaSize(const char* nvme_device, uint32_t nsid,
     goto cleanup;
   }
 
-  ret = -EIO;
+    ret = -EIO;
 
 cleanup:
   if (nvme_fd >= 0) {
@@ -1963,6 +2267,85 @@ cleanup:
   if (id_ns) {
     xio::freeHostMemory(id_ns, XIO_HOST_MEM_PLAIN);
   }
+  return ret;
+}
+
+/** Byte offset of @c mdts in Identify Controller data (struct nvme_id_ctrl). */
+static constexpr size_t kNvmeIdCtrlMdtsOffset = 77;
+
+__host__ int queryMdtsMaxXferBytes(const char* nvme_device, uint32_t nsid,
+                                   uint64_t* max_xfer_bytes) {
+  int nvme_fd = -1;
+  int ret = 0;
+  struct nvme_passthru_cmd cmd;
+  uint8_t* id_buf = nullptr;
+  uint8_t mdts = 0;
+
+  if (!nvme_device || !max_xfer_bytes) {
+    return -EINVAL;
+  }
+  *max_xfer_bytes = 0;
+
+  NvmeDevicePath nvme_path;
+  ret = xio::resolveNvmeDevicePath(nvme_device, nsid, &nvme_path);
+  if (ret != 0)
+    return ret;
+
+  hipError_t herr = xio::allocHostMemory(nvme_ep::nvmeAdminRespSize,
+                                         (void**)&id_buf,
+                                         "Identify Controller (MDTS)",
+                                         XIO_HOST_MEM_PLAIN);
+  if (herr != hipSuccess || !id_buf)
+    return -ENOMEM;
+
+  nvme_fd = openDeviceWithRetry(nvme_path.controllerPath.c_str(), O_RDONLY,
+                                "NVMe device", 5, 100);
+  if (nvme_fd < 0) {
+    ret = -errno;
+    goto cleanup;
+  }
+
+  memset(&cmd, 0, sizeof(cmd));
+  cmd.opcode = nvme_admin_identify;
+  cmd.nsid = 0;
+  cmd.cdw10 = 1; // CNS = Identify Controller
+  cmd.addr = reinterpret_cast<uint64_t>(id_buf);
+  cmd.data_len = nvme_ep::nvmeAdminRespSize;
+
+  ret = ioctlEintrSafe(nvme_fd, NVME_IOCTL_ADMIN_CMD, &cmd);
+  if (ret < 0) {
+    ret = -errno;
+    goto cleanup;
+  }
+
+  if (cmd.result & 0xFFFE) {
+    ret = -EIO;
+    goto cleanup;
+  }
+
+  if (kNvmeIdCtrlMdtsOffset >= nvme_ep::nvmeAdminRespSize) {
+    ret = -EINVAL;
+    goto cleanup;
+  }
+
+  mdts = id_buf[kNvmeIdCtrlMdtsOffset];
+  // NVMe: max transfer = (2^MDTS) * minimum memory page size; assume 4 KiB.
+  // MDTS=0 means no limit reported by the controller.
+  if (mdts == 0) {
+    *max_xfer_bytes = 0;
+  } else if (mdts >= sizeof(uint64_t) * 8) {
+    ret = -EINVAL;
+    goto cleanup;
+  } else {
+    *max_xfer_bytes = (1ULL << mdts) * 4096ULL;
+  }
+  ret = 0;
+
+cleanup:
+  if (nvme_fd >= 0)
+    close(nvme_fd);
+  if (id_buf)
+    xio::freeHostMemory(id_buf, XIO_HOST_MEM_PLAIN);
   return ret;
 }
 
