@@ -96,7 +96,7 @@ int test_sub_window_copy_layout() {
   ASSERT_EQ(offsetof(SDMA_PKT_LINEAR_LARGE_SUB_WINDOW_COPY, SRC_X_UNION), 12u);
   ASSERT_EQ(offsetof(SDMA_PKT_LINEAR_LARGE_SUB_WINDOW_COPY,
                      DST_ADDR_LO_UNION),
-            40u);
+            36u);
   ASSERT_EQ(offsetof(SDMA_PKT_LINEAR_LARGE_SUB_WINDOW_COPY, RECT_Z_UNION), 76u);
   return 0;
 }

@@ -5,6 +5,7 @@
  * Unit tests for sdma-ep configuration validation.
  */
 
+#include <cstddef>
 #include <cstdio>
 #include <string>
 
