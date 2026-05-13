@@ -1,0 +1,134 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+
+- name: Validate target OS
+  ansible.builtin.assert:
+    that:
+      - ansible_system == "Linux"
+      - ansible_os_family == "Debian"
+    fail_msg: >
+      This role currently supports Debian-family Linux targets only.
+
+- name: Install build prerequisites
+  ansible.builtin.apt:
+    name: "{{ fio_rocm_xio_apt_packages }}"
+    state: present
+    update_cache: true
+
+- name: Resolve hipcc path
+  ansible.builtin.shell:
+    cmd: "set -o pipefail && command -v hipcc"
+    executable: /bin/bash
+  register: fio_rocm_xio_hipcc
+  changed_when: false
+  failed_when: false
+
+- name: Fail if ROCm HIP toolchain is missing
+  ansible.builtin.fail:
+    msg: >
+      hipcc was not found on PATH. Install ROCm/HIP first, then rerun this role.
+  when: fio_rocm_xio_hipcc.rc != 0
+
+- name: Ensure source roots exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ fio_rocm_xio_rocm_xio_src_dir | dirname }}"
+    - "{{ fio_rocm_xio_fio_src_dir | dirname }}"
+
+- name: Checkout rocm-xio branch
+  ansible.builtin.git:
+    repo: "{{ fio_rocm_xio_rocm_xio_repo_url }}"
+    dest: "{{ fio_rocm_xio_rocm_xio_src_dir }}"
+    version: "{{ fio_rocm_xio_rocm_xio_branch }}"
+    update: true
+  when: fio_rocm_xio_manage_rocm_xio_checkout
+
+- name: Configure rocm-xio
+  ansible.builtin.command:
+    cmd: >-
+      cmake -S {{ fio_rocm_xio_rocm_xio_src_dir }}
+      -B {{ fio_rocm_xio_rocm_xio_build_dir }}
+      {{ fio_rocm_xio_rocm_xio_cmake_args | join(' ') }}
+
+- name: Build rocm-xio
+  ansible.builtin.command:
+    cmd: >-
+      cmake --build {{ fio_rocm_xio_rocm_xio_build_dir }}
+      --parallel {{ fio_rocm_xio_build_jobs }}
+
+- name: Install rocm-xio
+  ansible.builtin.command:
+    cmd: "cmake --install {{ fio_rocm_xio_rocm_xio_build_dir }}"
+
+- name: Checkout fio fork branch
+  ansible.builtin.git:
+    repo: "{{ fio_rocm_xio_fio_repo_url }}"
+    dest: "{{ fio_rocm_xio_fio_src_dir }}"
+    version: "{{ fio_rocm_xio_fio_branch }}"
+    update: true
+
+- name: Configure fio with rocm_xio ioengine
+  ansible.builtin.command:
+    chdir: "{{ fio_rocm_xio_fio_src_dir }}"
+    cmd: >-
+      ./configure
+      --prefix={{ fio_rocm_xio_fio_install_prefix }}
+      --enable-rocm-xio
+      --with-rocm-xio={{ fio_rocm_xio_rocm_xio_install_prefix }}
+      {{ fio_rocm_xio_fio_configure_extra_args | join(' ') }}
+  environment:
+    PATH: "{{ (fio_rocm_xio_hipcc.stdout | dirname) }}:{{ ansible_env.PATH }}"
+    LD_LIBRARY_PATH: >-
+      {{ fio_rocm_xio_rocm_xio_install_prefix }}/lib:/opt/rocm/lib:
+      {{ ansible_env.LD_LIBRARY_PATH | default('') }}
+
+- name: Build fio
+  ansible.builtin.command:
+    chdir: "{{ fio_rocm_xio_fio_src_dir }}"
+    cmd: "make -j{{ fio_rocm_xio_build_jobs }}"
+  environment:
+    LD_LIBRARY_PATH: >-
+      {{ fio_rocm_xio_rocm_xio_install_prefix }}/lib:/opt/rocm/lib:
+      {{ ansible_env.LD_LIBRARY_PATH | default('') }}
+
+- name: Install fio
+  ansible.builtin.command:
+    chdir: "{{ fio_rocm_xio_fio_src_dir }}"
+    cmd: "make install"
+  environment:
+    LD_LIBRARY_PATH: >-
+      {{ fio_rocm_xio_rocm_xio_install_prefix }}/lib:/opt/rocm/lib:
+      {{ ansible_env.LD_LIBRARY_PATH | default('') }}
+
+- name: Verify rocm_xio engine is present
+  ansible.builtin.command:
+    cmd: "{{ fio_rocm_xio_fio_install_prefix }}/bin/fio --enghelp"
+  register: fio_rocm_xio_enghelp
+  changed_when: false
+  environment:
+    LD_LIBRARY_PATH: >-
+      {{ fio_rocm_xio_rocm_xio_install_prefix }}/lib:/opt/rocm/lib:
+      {{ ansible_env.LD_LIBRARY_PATH | default('') }}
+
+- name: Assert rocm_xio engine registration
+  ansible.builtin.assert:
+    that:
+      - "'rocm_xio' in fio_rocm_xio_enghelp.stdout"
+    fail_msg: >
+      fio was built, but rocm_xio ioengine is not available in --enghelp output.
+
+- name: Run optional rocm_xio smoke test
+  ansible.builtin.command:
+    cmd: "{{ fio_rocm_xio_fio_install_prefix }}/bin/fio {{ fio_rocm_xio_smoke_job }}"
+  become: "{{ fio_rocm_xio_smoke_become }}"
+  when: fio_rocm_xio_enable_smoke_test
+  environment:
+    HSA_FORCE_FINE_GRAIN_PCIE: "1"
+    LD_LIBRARY_PATH: >-
+      {{ fio_rocm_xio_rocm_xio_install_prefix }}/lib:/opt/rocm/lib:
+      {{ ansible_env.LD_LIBRARY_PATH | default('') }}
