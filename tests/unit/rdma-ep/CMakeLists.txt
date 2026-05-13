@@ -82,7 +82,7 @@ if(GDA_BNXT OR GDA_MLX5 OR GDA_IONIC)
     FIXTURES_REQUIRED RDMA_HW)
 
   # Seed-parameterized sweep tests
-  foreach(seed RANGE 1 5)
+  foreach(seed RANGE 1 10)
     add_test(
       NAME test-rdma-loopback-seed${seed}
       COMMAND test-rdma-loopback

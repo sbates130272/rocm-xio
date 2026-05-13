@@ -97,6 +97,55 @@ xio_add_script_test(
 set_tests_properties(rdma-xio-loopback-4k PROPERTIES
   FIXTURES_REQUIRED RDMA_HW)
 
+# Additional transfer sizes for GPU loopback coverage
+xio_add_script_test(
+  NAME rdma-xio-loopback-64
+  SCRIPT ${_wrapper}
+  LABELS hardware rdma verify
+  TIMEOUT 120
+  ARGS ${_xio_script}
+  ENVIRONMENT
+    "TRANSFER_SIZE=64"
+    "LFSR_SEED=0x1111"
+    "ITERATIONS=1"
+    "TEST_BIN=${_test_bin}"
+    "RDMA_CORE_LIB=${_rdma_lib}"
+)
+set_tests_properties(rdma-xio-loopback-64 PROPERTIES
+  FIXTURES_REQUIRED RDMA_HW)
+
+xio_add_script_test(
+  NAME rdma-xio-loopback-512
+  SCRIPT ${_wrapper}
+  LABELS hardware rdma verify
+  TIMEOUT 120
+  ARGS ${_xio_script}
+  ENVIRONMENT
+    "TRANSFER_SIZE=512"
+    "LFSR_SEED=0x2222"
+    "ITERATIONS=1"
+    "TEST_BIN=${_test_bin}"
+    "RDMA_CORE_LIB=${_rdma_lib}"
+)
+set_tests_properties(rdma-xio-loopback-512 PROPERTIES
+  FIXTURES_REQUIRED RDMA_HW)
+
+xio_add_script_test(
+  NAME rdma-xio-loopback-8k
+  SCRIPT ${_wrapper}
+  LABELS hardware rdma verify
+  TIMEOUT 120
+  ARGS ${_xio_script}
+  ENVIRONMENT
+    "TRANSFER_SIZE=8192"
+    "LFSR_SEED=0x3333"
+    "ITERATIONS=1"
+    "TEST_BIN=${_test_bin}"
+    "RDMA_CORE_LIB=${_rdma_lib}"
+)
+set_tests_properties(rdma-xio-loopback-8k PROPERTIES
+  FIXTURES_REQUIRED RDMA_HW)
+
 # --- xio-tester batch-size 4 -----------------------
 
 xio_add_script_test(

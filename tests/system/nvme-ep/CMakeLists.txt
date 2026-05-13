@@ -130,6 +130,24 @@ xio_add_script_test(
 )
 
 xio_add_script_test(
+  NAME nvme-smoke-batch-8
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme smoke
+  TIMEOUT 30
+  ARGS ${_smoke_common} --batch-size 8
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
+)
+
+xio_add_script_test(
+  NAME nvme-smoke-batch-32
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme smoke
+  TIMEOUT 30
+  ARGS ${_smoke_common} --batch-size 32
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
+)
+
+xio_add_script_test(
   NAME nvme-smoke-batch-16
   SCRIPT ${_smoke_wrapper}
   LABELS hardware nvme smoke
