@@ -81,6 +81,14 @@ Combine labels to narrow the scope:
 
    ctest --test-dir build -L "unit" -L "rdma"
 
+All tests that exercise the software ``test-ep`` endpoint share the
+``test-ep`` CTest label (unit struct checks, emulate library runs, and
+``xio-tester`` CLI smoke tests). Run them together with:
+
+.. code-block:: bash
+
+   ctest --test-dir build -L "test-ep" --output-on-failure
+
 Test inventory
 ==============
 
@@ -110,7 +118,11 @@ System tests
 ------------
 
 - ``test-ep-emulate`` -- Full SQE/CQE round-trip in emulation mode
-  (GPU required)
+  (HIP runtime; polling, doorbell, multi-thread, and LFSR verify paths)
+- ``test-ep-tester-emulate`` -- ``xio-tester test-ep --emulate`` (verbose)
+- ``test-ep-tester-emulate-doorbell`` -- emulate mode with ``--doorbell 64``
+- ``test-ep-tester-emulate-verify`` -- emulate mode with ``--verify``
+- ``test-ep-tester-emulate-doorbell-verify`` -- doorbell plus ``--verify``
 
 Hardware tests
 --------------
