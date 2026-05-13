@@ -64,7 +64,8 @@ Every test carries one or more CTest labels for filtering with
 Label         Definition
 ============  =========================================
 ``unit``      CPU-only, no GPU or NIC (runs in CI)
-``system``    Needs a `HIP-capable GPU`_
+``system``    Full-stack endpoint tests (GPU or emulation)
+``emulate``   CPU-only ``xio-tester test-ep --emulate`` checks
 ``hardware``  Needs a GPU and a specific RDMA NIC
 ``sweep``     Parameterized multi-seed loopback runs
 ``stress``    Long-running (timeout: 600 seconds)
@@ -72,8 +73,6 @@ Label         Definition
 ``common``    Common library utilities
 ``fixture``   CTest fixture (setup/teardown)
 ============  =========================================
-
-.. _HIP-capable GPU: https://rocm.docs.amd.com/projects/install-on-linux/en/latest/reference/system-requirements.html#supported-gpus
 
 Combine labels to narrow the scope:
 
@@ -109,8 +108,14 @@ These run in CI without hardware:
 System tests
 ------------
 
-- ``test-ep-emulate`` -- Full SQE/CQE round-trip in emulation mode
-  (GPU required)
+- ``test-ep-emulate`` -- Library-level SQE/CQE round-trip in emulation
+  mode
+- ``test-ep-cli-emulate`` through
+  ``test-ep-cli-emulate-doorbell-verify`` -- ``xio-tester test-ep
+  --emulate`` smoke matrix (no GPU required)
+- ``test-ep-cli-reject-doorbell-too-small`` and
+  ``test-ep-cli-reject-emulate-memory-mode`` -- Negative CLI validation
+  checks
 
 Hardware tests
 --------------
@@ -464,7 +469,7 @@ The GitHub Actions workflows run tests as follows:
 - **build-check**: ``ctest -L "unit"`` -- CPU-only tests in a
   ``rocm/dev-ubuntu-24.04:7.2`` container (no GPU)
 - **test-emulate**: ``ctest -L "unit"`` plus
-  ``xio-tester test-ep --emulate`` (no GPU, emulation mode)
+  ``ctest -L "emulate"`` (no GPU, emulation mode)
 
 Hardware and sweep tests are not run in CI -- they require physical
 NIC and GPU hardware.
