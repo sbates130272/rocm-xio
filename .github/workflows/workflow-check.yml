@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-name: spell-check
+name: workflow-check
 
 on:
   workflow_dispatch:
@@ -11,11 +11,9 @@ on:
       - main
       - 'feat/**'
     paths:
-      - '**.md'
-      - 'docs/**'
-      - '.wordlist.txt'
-      - '.spellcheck.yml'
-      - '.github/workflows/spell-check.yml'
+      - '.github/actions/**'
+      - '.github/dependabot.yml'
+      - '.github/workflows/**'
 
 permissions:
   contents: read
@@ -25,11 +23,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  spell-check:
-    name: spell-check for rocm-xio
+  actionlint:
+    name: actionlint
     runs-on: ubuntu-latest
     steps:
     - name: Check out code.
       uses: actions/checkout@v5.0.0
-    - name: GitHub Spellcheck Action
-      uses: rojopolis/spellcheck-github-actions@0.52.0
+    - name: Run actionlint
+      uses: rhysd/actionlint@v1

@@ -23,6 +23,17 @@
         "CMAKE_BUILD_TYPE": "Release",
         "BUILD_TESTING": "OFF"
       }
+    },
+    {
+      "name": "ci-rocm",
+      "displayName": "CI ROCm (Release, tests ON)",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON",
+        "OFFLOAD_ARCH": "gfx942:xnack+",
+        "ROCM_PATH": "/opt/rocm"
+      }
     }
   ],
   "buildPresets": [
@@ -33,6 +44,10 @@
     {
       "name": "release",
       "configurePreset": "release"
+    },
+    {
+      "name": "ci-rocm",
+      "configurePreset": "ci-rocm"
     }
   ],
   "testPresets": [

@@ -1,0 +1,32 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - '*'
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      python-root:
+        patterns:
+          - '*'
+
+  - package-ecosystem: pip
+    directory: /docs/sphinx
+    schedule:
+      interval: weekly
+    groups:
+      python-docs:
+        patterns:
+          - '*'

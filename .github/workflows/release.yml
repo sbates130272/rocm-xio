@@ -17,12 +17,18 @@ on:
         required: false
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-release:
     name: Build .deb packages and create GitHub Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     container:
       image: rocm/dev-ubuntu-24.04:7.2
       options: --user root
@@ -42,17 +48,29 @@ jobs:
           >> "$GITHUB_ENV"
 
     - name: Install build dependencies
+      uses: ./.github/actions/setup-rocm-build
+      with:
+        apt-packages: >-
+          devscripts
+          equivs
+          lsb-release
+          python3-pip
+          python3-venv
+
+    - name: Install Debian package dependencies
       run: |
-        apt-get update
-        apt-get install -y devscripts equivs lsb-release python3-pip
         mk-build-deps --install --remove \
           --tool 'apt-get -y --no-install-recommends' \
           debian/control
 
     - name: Install rocm-kpack Python tools
       run: |
-        pip install --break-system-packages \
+        python3 -m venv .venv
+        . .venv/bin/activate
+        python -m pip install --upgrade pip
+        python -m pip install \
           "rocm-kpack @ git+https://github.com/ROCm/rocm-kpack.git@main"
+        echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
     - name: Generate debian/changelog
       run: debian/gen-changelog.sh

@@ -43,6 +43,7 @@ PKG_VERSION="${BASE_VERSION}-g${GIT_REV}"
 KERNEL_TAG=""
 WORK_DIR="/tmp/rocm-xio-ionic-eth-rdma-build"
 BUILD_ONLY=false
+# shellcheck disable=SC2034
 UNINSTALL=false
 
 # googlesource per-directory tarballs
@@ -71,6 +72,7 @@ while [[ $# -gt 0 ]]; do
     --build-only)
       BUILD_ONLY=true; shift ;;
     --uninstall)
+      # shellcheck disable=SC2034
       UNINSTALL=true; shift ;;
     -h|--help)
       echo "Usage: $0 [--kernel-tag vX.Y]" \

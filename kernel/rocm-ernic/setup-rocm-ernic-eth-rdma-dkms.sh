@@ -39,6 +39,7 @@ BASE_VERSION="0.1.0"
 ERNIC_DIR=""
 PKG_VERSION=""
 BUILD_ONLY=false
+# shellcheck disable=SC2034
 UNINSTALL=false
 
 # -------------------------------------------------------
@@ -54,6 +55,7 @@ while [[ $# -gt 0 ]]; do
     --build-only)
       BUILD_ONLY=true; shift ;;
     --uninstall)
+      # shellcheck disable=SC2034
       UNINSTALL=true; shift ;;
     -h|--help)
       echo "Usage: $0 [--ernic-dir DIR]" \
