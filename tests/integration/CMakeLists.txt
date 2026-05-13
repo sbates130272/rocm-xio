@@ -36,6 +36,19 @@ xio_add_install_test(
   RUN
 )
 
+# Compile-only duplicates to isolate build coverage from runtime behaviour.
+xio_add_install_test(
+  NAME list-endpoints-build-only
+  SOURCE_DIR
+    ${CMAKE_SOURCE_DIR}/examples/list-endpoints
+)
+
+xio_add_install_test(
+  NAME endpoint-info-build-only
+  SOURCE_DIR
+    ${CMAKE_SOURCE_DIR}/examples/endpoint-info
+)
+
 # Compile-only: SDMA P2P transfer (needs 2 GPUs to run).
 xio_add_install_test(
   NAME sdma-ep-p2p
@@ -61,3 +74,10 @@ if(MPI_FOUND)
       ${CMAKE_SOURCE_DIR}/examples/sdma-ep-allgather
   )
 endif()
+
+# Validate that key headers and CMake package exports are installed.
+xio_add_install_test(
+  NAME install-layout
+  SCRIPT
+    ${CMAKE_CURRENT_SOURCE_DIR}/check-install-layout.cmake
+)

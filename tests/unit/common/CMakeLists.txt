@@ -38,3 +38,17 @@ xio_add_test(
   LABELS unit common
   TIMEOUT 30
 )
+
+xio_add_test(
+  NAME test-xio-env
+  SOURCE test-xio-env.hip
+  LABELS unit common
+  TIMEOUT 30
+)
+
+xio_add_test(
+  NAME test-tcp-exchange
+  SOURCE test-tcp-exchange.hip
+  LABELS unit common
+  TIMEOUT 30
+)

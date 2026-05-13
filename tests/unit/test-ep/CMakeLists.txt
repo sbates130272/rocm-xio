@@ -11,3 +11,11 @@ xio_add_test(
   TIMEOUT 30
   INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/src/endpoints/test-ep
 )
+
+xio_add_test(
+  NAME test-ep-runtime-config
+  SOURCE test-ep-runtime-config.hip
+  LABELS unit test-ep
+  TIMEOUT 30
+  INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/src/endpoints/test-ep
+)

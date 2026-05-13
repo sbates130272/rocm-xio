@@ -416,3 +416,58 @@ xio_add_script_test(
     "READ_IO=128"
     "BUILD_DIR=${CMAKE_BINARY_DIR}"
 )
+
+# --- Additional memory-mode smoke tests ---------------
+
+xio_add_script_test(
+  NAME nvme-smoke-memmode-8-batch-8
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme smoke
+  TIMEOUT 30
+  ARGS ${_smoke_common} -m 8 --less-timing --batch-size 8
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
+)
+
+xio_add_script_test(
+  NAME nvme-smoke-memmode-11-batch-4
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme smoke
+  TIMEOUT 30
+  ARGS ${_smoke_common} -m 11 --less-timing --batch-size 4
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
+)
+
+# --- Additional negative validation tests -------------
+
+xio_add_script_test(
+  NAME nvme-reject-verify-batch-2
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme negative
+  TIMEOUT 15
+  ARGS --write-io 8 --read-io 8 --verify --batch-size 2
+  ENVIRONMENT
+    "XIO_TESTER=${_xio_tester}"
+    "EXPECT_FAIL=1"
+)
+
+xio_add_script_test(
+  NAME nvme-reject-infinite-read-write
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme negative
+  TIMEOUT 15
+  ARGS --infinite --write-io 1 --read-io 1
+  ENVIRONMENT
+    "XIO_TESTER=${_xio_tester}"
+    "EXPECT_FAIL=1"
+)
+
+xio_add_script_test(
+  NAME nvme-reject-queue-length-100
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme negative
+  TIMEOUT 15
+  ARGS --queue-length 100 --read-io 1
+  ENVIRONMENT
+    "XIO_TESTER=${_xio_tester}"
+    "EXPECT_FAIL=1"
+)
