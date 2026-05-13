@@ -294,10 +294,7 @@ __device__ static void driveEndpointSingle(
       uint64_t* prpSlot = bufferParams.prpListPool
                             ? bufferParams.prpListPool + prpOff
                             : nullptr;
-      uint64_t prpSlotDma = bufferParams.prpListPoolDma
-                              ? bufferParams.prpListPoolDma +
-                                  prpOff * sizeof(uint64_t)
-                              : 0;
+      uint64_t prpSlotDma = prpListDmaForSlot(bufferParams, b);
       uint32_t pageOff = (uint32_t)(buf_off / NVME_PAGE_SIZE);
       uint64_t intraPageOff = buf_off % NVME_PAGE_SIZE;
 
@@ -383,10 +380,7 @@ __device__ static void driveEndpointSingle(
         uint64_t* prpSlot = bufferParams.prpListPool
                               ? bufferParams.prpListPool + prpOff
                               : nullptr;
-        uint64_t prpSlotDma = bufferParams.prpListPoolDma
-                                ? bufferParams.prpListPoolDma +
-                                    prpOff * sizeof(uint64_t)
-                                : 0;
+        uint64_t prpSlotDma = prpListDmaForSlot(bufferParams, b);
         uint32_t pageOff = (uint32_t)(buf_off / NVME_PAGE_SIZE);
         uint64_t intraPageOff = buf_off % NVME_PAGE_SIZE;
 
@@ -661,10 +655,7 @@ __device__ static void driveEndpointWavefront(
         uint64_t* prpSlot = bufferParams.prpListPool
                               ? bufferParams.prpListPool + prpOff
                               : nullptr;
-        uint64_t prpSlotDma = bufferParams.prpListPoolDma
-                                ? bufferParams.prpListPoolDma +
-                                    prpOff * sizeof(uint64_t)
-                                : 0;
+        uint64_t prpSlotDma = prpListDmaForSlot(bufferParams, b);
         uint32_t pageOff = (uint32_t)(buf_off / NVME_PAGE_SIZE);
         uint64_t intraPageOff = buf_off % NVME_PAGE_SIZE;
 
@@ -1307,15 +1298,9 @@ __host__ hipError_t run(XioEndpointConfig* config) {
     return hipErrorInvalidValue;
   }
   uint32_t prpEntriesPerCmd = (xfer_size > NVME_PAGE_SIZE)
-                                ? (uint32_t)((xfer_size / NVME_PAGE_SIZE) + 1)
+                                ? prpListEntriesPerPage()
                                 : 0;
   uint32_t prpStridePerCmd = prpEntriesPerCmd;
-  if (prpStridePerCmd > 0) {
-    uint32_t s = 1;
-    while (s < prpStridePerCmd)
-      s <<= 1;
-    prpStridePerCmd = s;
-  }
   uint32_t prpPoolEntriesPerQueue = prpStridePerCmd * effBatch;
   size_t prpPoolBytes = (size_t)prpPoolEntriesPerQueue * sizeof(uint64_t);
   long sys_page_sz = sysconf(_SC_PAGESIZE);
@@ -1327,6 +1312,8 @@ __host__ hipError_t run(XioEndpointConfig* config) {
   struct PrpPool {
     void* ptr = nullptr;
     void* gpuPtr = nullptr;
+    uint64_t* pageDmas = nullptr;
+    uint64_t* pageDmasGpu = nullptr;
     uint64_t dma = 0;
     size_t size = 0;
     bool hipAllocated = false;
@@ -1487,6 +1474,14 @@ __host__ hipError_t run(XioEndpointConfig* config) {
         result = hipErrorMemoryAllocation;
         goto cleanup;
       }
+      if ((reinterpret_cast<uintptr_t>(pool) & (NVME_PAGE_SIZE - 1)) != 0) {
+        ROCXIO_LOG_ERROR("PRP list pool for queue %u is not "
+                         "page-aligned\n",
+                         qid);
+        (void)hipHostFree(pool);
+        result = hipErrorInvalidValue;
+        goto cleanup;
+      }
       memset(pool, 0, prpPoolBytes);
 
       uint64_t pool_dma = getPhysAddr(pool);
@@ -1505,8 +1500,44 @@ __host__ hipError_t run(XioEndpointConfig* config) {
         gpu_pool = pool;
       }
 
+      uint64_t* page_dmas = nullptr;
+      hipError_t dmas_err = hipHostMalloc(
+        (void**)&page_dmas, sizeof(*page_dmas) * effBatch,
+        hipHostMallocMapped);
+      if (dmas_err != hipSuccess || !page_dmas) {
+        ROCXIO_LOG_ERROR("Failed to allocate PRP list DMA "
+                         "table for queue %u: %s\n",
+                         qid, hipGetErrorString(dmas_err));
+        (void)hipHostFree(pool);
+        result = hipErrorMemoryAllocation;
+        goto cleanup;
+      }
+      memset(page_dmas, 0, sizeof(*page_dmas) * effBatch);
+      for (uint32_t b = 0; b < effBatch; b++) {
+        uint8_t* slot = static_cast<uint8_t*>(pool) +
+                        (size_t)b * prpStridePerCmd * sizeof(uint64_t);
+        page_dmas[b] = getPhysAddr(slot);
+        if (!page_dmas[b] ||
+            (page_dmas[b] & (NVME_PAGE_SIZE - 1)) != 0) {
+          ROCXIO_LOG_ERROR("Failed to get PRP list page "
+                           "phys addr for queue %u slot %u\n",
+                           qid, b);
+          (void)hipHostFree(page_dmas);
+          (void)hipHostFree(pool);
+          result = hipErrorInvalidValue;
+          goto cleanup;
+        }
+      }
+      void* gpu_page_dmas = nullptr;
+      (void)hipHostGetDevicePointer(&gpu_page_dmas, page_dmas, 0);
+      if (!gpu_page_dmas)
+        gpu_page_dmas = page_dmas;
+      pool_dma = page_dmas[0];
+
       prpPools[q].ptr = pool;
       prpPools[q].gpuPtr = gpu_pool;
+      prpPools[q].pageDmas = page_dmas;
+      prpPools[q].pageDmasGpu = static_cast<uint64_t*>(gpu_page_dmas);
       prpPools[q].dma = pool_dma;
       prpPools[q].size = prpPoolBytes;
       prpPools[q].hipAllocated = true;
@@ -1558,6 +1589,7 @@ __host__ hipError_t run(XioEndpointConfig* config) {
     qBufParams.prpListPool = prpPools[q].gpuPtr
                                ? static_cast<uint64_t*>(prpPools[q].gpuPtr)
                                : static_cast<uint64_t*>(prpPools[q].ptr);
+    qBufParams.prpListPageDmas = prpPools[q].pageDmasGpu;
     qBufParams.prpListPoolDma = prpPools[q].dma;
     qBufParams.prpEntriesPerCmd = prpStridePerCmd;
 
@@ -1704,6 +1736,9 @@ cleanup:
 
   // Free per-queue PRP list pools
   for (uint16_t q = 0; q < numQueues; q++) {
+    if (prpPools[q].pageDmas) {
+      (void)hipHostFree(prpPools[q].pageDmas);
+    }
     if (prpPools[q].ptr && prpPools[q].hipAllocated) {
       (void)hipHostFree(prpPools[q].ptr);
     }
