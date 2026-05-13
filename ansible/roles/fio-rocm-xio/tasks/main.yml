@@ -129,6 +129,24 @@
     - fio_rocm_xio_generate_example_job
     - fio_rocm_xio_parse_only_job
 
+- name: Check /dev/rocm-xio device for hardware test
+  ansible.builtin.stat:
+    path: "/dev/rocm-xio"
+  register: fio_rocm_xio_kernel_device
+  when:
+    - fio_rocm_xio_generate_example_job
+    - fio_rocm_xio_run_hw_test
+
+- name: Fail when /dev/rocm-xio is unavailable for hardware test
+  ansible.builtin.fail:
+    msg: >
+      /dev/rocm-xio is missing. Load/install the rocm-xio kernel module before
+      enabling fio_rocm_xio_run_hw_test.
+  when:
+    - fio_rocm_xio_generate_example_job
+    - fio_rocm_xio_run_hw_test
+    - not fio_rocm_xio_kernel_device.stat.exists
+
 - name: Run optional hardware smoke test job
   become: true
   ansible.builtin.command:
