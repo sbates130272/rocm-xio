@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: MIT
+---
+# Example: ansible-playbook site_rocm_xio_fio.yml
+# Requires ROCm packages available to apt (see INSTALL.md for repository setup).
+- name: Build rocm-xio and fio with rocm_xio engine
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  roles:
+    - role: rocm_xio_fio

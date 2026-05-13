@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: MIT
+---
+# Git sources: fio persistent engine requires rocm-xio branch with the
+# nvme-ep persistent session API (openPersistentSession / postPersistent /
+# reapPersistent).  Align these branches when updating.
+rocm_xio_fio_rocm_xio_repo: "https://github.com/sbates130272/rocm-xio.git"
+rocm_xio_fio_rocm_xio_version: "dev/stebates/nvme-ep-fio-api"
+
+rocm_xio_fio_fio_repo: "https://github.com/sbates130272/fio.git"
+rocm_xio_fio_fio_version: "dev/batesste/rocm-xio-engine"
+
+# Install prefix for librocm-xio and headers consumed by fio configure.
+rocm_xio_fio_install_prefix: "/opt/rocm-xio-fio"
+
+# Where to clone and build (ephemeral OK).
+rocm_xio_fio_workdir: "/var/tmp/rocm-xio-fio-build"
+
+rocm_xio_fio_build_type: "Release"
+
+# Passed to rocm-xio CMake as -DOFFLOAD_ARCH= when non-empty (recommended when
+# the build host has no usable GPU for autodetection).
+rocm_xio_fio_offload_arch: ""
+
+# Delete fio config-host.mak before configure so ./configure re-runs.
+rocm_xio_fio_force_fio_reconfigure: false
+
+# When true, run a tiny fio job after build (needs NVMe namespace path and
+# privileges; may destroy data on the target device).
+rocm_xio_fio_run_smoke_test: false
+rocm_xio_fio_smoke_filename: "/dev/nvme0n1"
+rocm_xio_fio_smoke_runtime: "2s"

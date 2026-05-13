@@ -1,0 +1,149 @@
+# SPDX-License-Identifier: MIT
+---
+- name: Require Debian family target
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family == "Debian"
+    fail_msg: >-
+      This role is written for Ubuntu/Debian package names only.
+
+- name: Install build and runtime dependencies
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - cmake
+      - git
+      - pkg-config
+      - python3
+      - rocm-hip-sdk
+      - rocminfo
+      - libdrm-dev
+      - libhsa-runtime-dev
+      - libcli11-dev
+    state: present
+    update_cache: true
+  become: true
+
+- name: Ensure work and install directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ rocm_xio_fio_workdir }}"
+    - "{{ rocm_xio_fio_install_prefix }}"
+  become: true
+
+- name: Clone rocm-xio
+  ansible.builtin.git:
+    repo: "{{ rocm_xio_fio_rocm_xio_repo }}"
+    version: "{{ rocm_xio_fio_rocm_xio_version }}"
+    dest: "{{ rocm_xio_fio_workdir }}/rocm-xio"
+    force: true
+  become: true
+
+- name: Define rocm-xio CMake base argv
+  ansible.builtin.set_fact:
+    _rocm_xio_fio_cmake_base:
+      - cmake
+      - "-S"
+      - "{{ rocm_xio_fio_workdir }}/rocm-xio"
+      - "-B"
+      - "{{ rocm_xio_fio_workdir }}/rocm-xio/build"
+      - "-DCMAKE_BUILD_TYPE={{ rocm_xio_fio_build_type }}"
+      - "-DCMAKE_INSTALL_PREFIX={{ rocm_xio_fio_install_prefix }}"
+      - "-DBUILD_CLIENTS=ON"
+
+- name: Set optional OFFLOAD_ARCH CMake args
+  ansible.builtin.set_fact:
+    _rocm_xio_fio_cmake_offload: >-
+      {{
+        ['-DOFFLOAD_ARCH=' ~ rocm_xio_fio_offload_arch]
+        if (rocm_xio_fio_offload_arch | length > 0) else []
+      }}
+
+- name: Combine rocm-xio CMake argv
+  ansible.builtin.set_fact:
+    rocm_xio_fio_rocm_xio_cmake_argv: "{{ _rocm_xio_fio_cmake_base + _rocm_xio_fio_cmake_offload }}"
+
+- name: Configure rocm-xio with CMake
+  ansible.builtin.command:
+    argv: "{{ rocm_xio_fio_rocm_xio_cmake_argv }}"
+  args:
+    creates: "{{ rocm_xio_fio_workdir }}/rocm-xio/build/CMakeCache.txt"
+  environment:
+    PATH: "/opt/rocm/bin:{{ ansible_env.PATH }}"
+  become: true
+
+- name: Build and install rocm-xio
+  ansible.builtin.command:
+    argv:
+      - cmake
+      - "--build"
+      - "{{ rocm_xio_fio_workdir }}/rocm-xio/build"
+      - "--target"
+      - "install"
+  environment:
+    PATH: "/opt/rocm/bin:{{ ansible_env.PATH }}"
+  become: true
+
+- name: Clone fio fork with rocm_xio engine
+  ansible.builtin.git:
+    repo: "{{ rocm_xio_fio_fio_repo }}"
+    version: "{{ rocm_xio_fio_fio_version }}"
+    dest: "{{ rocm_xio_fio_workdir }}/fio"
+    force: true
+  become: true
+
+- name: Remove fio config-host.mak when forcing reconfigure
+  ansible.builtin.file:
+    path: "{{ rocm_xio_fio_workdir }}/fio/config-host.mak"
+    state: absent
+  when: rocm_xio_fio_force_fio_reconfigure | bool
+  become: true
+
+- name: Configure fio with ROCm XIO engine
+  ansible.builtin.command:
+    argv:
+      - "./configure"
+      - "--enable-rocm-xio"
+      - "--with-rocm-xio={{ rocm_xio_fio_install_prefix }}"
+    chdir: "{{ rocm_xio_fio_workdir }}/fio"
+  args:
+    creates: "{{ rocm_xio_fio_workdir }}/fio/config-host.mak"
+  environment:
+    PATH: "/opt/rocm/bin:{{ ansible_env.PATH }}"
+    CXX: hipcc
+  become: true
+
+- name: Build fio
+  ansible.builtin.command:
+    argv:
+      - "make"
+      - "-j{{ ansible_processor_vcpus | default(4) }}"
+    chdir: "{{ rocm_xio_fio_workdir }}/fio"
+  environment:
+    PATH: "/opt/rocm/bin:{{ ansible_env.PATH }}"
+  become: true
+
+- name: Run optional rocm_xio smoke fio job
+  ansible.builtin.command:
+    argv:
+      - "{{ rocm_xio_fio_workdir }}/fio/fio"
+      - "--ioengine=rocm_xio"
+      - "--thread=1"
+      - "--numjobs=1"
+      - "--group_reporting"
+      - "--name=smoke"
+      - "--filename={{ rocm_xio_fio_smoke_filename }}"
+      - "--rw=read"
+      - "--bs=4096"
+      - "--iodepth=32"
+      - "--rocm_xio_queue_length=256"
+      - "--time_based"
+      - "--runtime={{ rocm_xio_fio_smoke_runtime }}"
+  environment:
+    HSA_FORCE_FINE_GRAIN_PCIE: "1"
+    PATH: "/opt/rocm/bin:{{ ansible_env.PATH }}"
+  when: rocm_xio_fio_run_smoke_test | bool
+  become: true
