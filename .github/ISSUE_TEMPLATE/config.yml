@@ -1,0 +1,16 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ROCm/rocm-xio/security/policy
+    about: >-
+      Please report security issues privately as described in
+      SECURITY.md. Do not open a public issue.
+  - name: Feature request / discussion
+    url: https://github.com/ROCm/rocm-xio/discussions
+    about: >-
+      Feature requests and open-ended questions should be filed as
+      GitHub Discussions instead of issues.

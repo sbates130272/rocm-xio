@@ -1,0 +1,108 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+
+name: Bug report
+description: Report a defect in rocm-xio
+title: "[bug] "
+labels:
+  - bug
+  - triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Before submitting,
+        please skim the existing issues to avoid duplicates and review
+        [SECURITY.md](../../blob/main/SECURITY.md) — do **not** file
+        security vulnerabilities as public issues.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One- or two-sentence description of the problem.
+      placeholder: rocm-xio crashes when ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: >-
+        Exact commands you ran, including any environment variables.
+        Prefer commands copied verbatim from your terminal.
+      render: bash
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: >-
+        Include the full error message and any relevant log output.
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: rocm-xio version
+      description: >-
+        Output of `git rev-parse --short HEAD`, the `.deb` version,
+        or the tag you built from.
+    validations:
+      required: true
+
+  - type: input
+    id: rocm
+    attributes:
+      label: ROCm version
+      placeholder: e.g. 7.2
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS / kernel
+      placeholder: Ubuntu 24.04, kernel 6.8.0-...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: rdma-vendor
+    attributes:
+      label: RDMA vendor (if applicable)
+      options:
+        - Not applicable
+        - Broadcom (bnxt)
+        - Pensando (ionic)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware
+      description: >-
+        GPU model, NIC model, any relevant NVMe device (by stable id,
+        never a volatile `/dev/nvmeXnY` path).
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Additional logs / context
+      description: >-
+        `dmesg`, `rdma statistic show`, ctest log, etc.
