@@ -1,26 +1,50 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+
 name: scripts-check
 
 on:
   workflow_dispatch:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
       - 'feat/**'
     paths:
       - 'scripts/**'
+      - 'debian/**'
+      - 'kernel/**'
+      - 'udev/**'
       - '.github/workflows/scripts-check.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   shellcheck:
     name: ShellCheck
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
     - name: Check out code.
       uses: actions/checkout@v5.0.0
+      with:
+        persist-credentials: false
+    # Scan shell scripts across the repo so debian, udev, and kernel
+    # helper scripts are also linted, not just scripts/.
     - name: Run ShellCheck
       uses: ludeeus/action-shellcheck@2.0.0
       with:
-        scandir: scripts
         severity: warning
+        ignore_paths: >-
+          build
+          build-docs
+          .venv
       env:
         SHELLCHECK_OPTS: --exclude=SC2086

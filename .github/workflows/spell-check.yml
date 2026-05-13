@@ -1,8 +1,13 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+
 name: spell-check
 
 on:
   workflow_dispatch:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
       - 'feat/**'
@@ -11,13 +16,25 @@ on:
       - 'docs/**'
       - '.wordlist.txt'
       - '.spellcheck.yml'
+      - '.github/workflows/spell-check.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   spell-check:
     name: spell-check for rocm-xio
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
     - name: Check out code.
       uses: actions/checkout@v5.0.0
+      with:
+        persist-credentials: false
     - name: GitHub Spellcheck Action
       uses: rojopolis/spellcheck-github-actions@0.52.0

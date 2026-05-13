@@ -1,8 +1,13 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+
 name: test-emulate
 
 on:
   workflow_dispatch:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
       - 'feat/**'
@@ -17,11 +22,21 @@ on:
       - 'cmake/**'
       - 'scripts/**'
       - 'Makefile'
+      - '.github/workflows/test-emulate.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test-emulate:
     name: test-emulate for rocm-xio
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     container:
       image: rocm/dev-ubuntu-24.04:7.2
       options: --user root
@@ -30,6 +45,8 @@ jobs:
     steps:
     - name: Check out code.
       uses: actions/checkout@v5.0.0
+      with:
+        persist-credentials: false
     - name: Install additional dependencies
       run: |
         apt-get update
