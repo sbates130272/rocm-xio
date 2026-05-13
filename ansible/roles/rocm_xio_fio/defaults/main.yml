@@ -1,0 +1,59 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Defaults for rocm_xio_fio: build rocm-xio (persistent nvme-ep API) and fio
+# with the rocm_xio engine, then optionally smoke-test against an NVMe
+# namespace. Override rocm_xio_git_version / fio_git_version for your forks.
+
+rocm_xio_git_repo: "https://github.com/sbates130272/rocm-xio.git"
+rocm_xio_git_version: "dev/stebates/nvme-ep-fio-api"
+
+fio_git_repo: "https://github.com/sbates130272/fio.git"
+fio_git_version: "dev/batesste/rocm-xio-engine"
+
+# Build trees (root-owned unless you change build_user).
+rocm_xio_build_dir: "/var/tmp/rocm-xio-fio-build/rocm-xio"
+fio_build_dir: "/var/tmp/rocm-xio-fio-build/fio"
+
+# Install prefix for librocm-xio and fio binary.
+rocm_xio_install_prefix: "/opt/rocm-xio-fio"
+
+# Passed to rocm-xio CMake as CMAKE_PREFIX_PATH (ROCm CMake packages).
+rocm_cmake_prefix_path: "/opt/rocm"
+
+# Optional: set to e.g. "gfx942" or "gfx1100" to force HIP arch; empty uses
+# rocm-xio CMake defaults for the build host.
+rocm_xio_offload_arch: ""
+
+# Extra CMake arguments for rocm-xio (string appended to cmake command).
+rocm_xio_cmake_extra: ""
+
+# Shared library simplifies linking fio against device code; set OFF for static.
+rocm_xio_build_shared: true
+
+# Skip BUILD_CLIENTS (xio-tester) to shorten the build; set true to enable.
+rocm_xio_build_clients: false
+
+# fio ./configure extra flags (string).
+fio_configure_extra: ""
+
+# OS packages required to compile (Ubuntu-oriented names; override per distro).
+rocm_xio_fio_packages:
+  - build-essential
+  - cmake
+  - ninja-build
+  - git
+  - pkg-config
+  - python3
+  - libnuma-dev
+
+# When set, run a short read-only fio job after build (requires GPU + NVMe +
+# rocm-xio kernel module + IOMMU setup per project docs).
+rocm_xio_fio_smoke_filename: ""
+rocm_xio_fio_smoke_runtime: "5s"
+rocm_xio_fio_smoke_iodepth: 32
+rocm_xio_fio_smoke_queue_length: 64
+rocm_xio_fio_smoke_queue_id: 1
+rocm_xio_fio_smoke_gpu_id: 0
+rocm_xio_fio_smoke_memory_mode: 0

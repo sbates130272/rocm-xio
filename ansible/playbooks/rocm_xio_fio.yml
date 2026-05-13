@@ -1,0 +1,15 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Run from the ansible/ directory so roles_path resolves:
+#   cd ansible && ansible-playbook -i ../inventory playbooks/rocm_xio_fio.yml
+#
+# Optional smoke test (disposable NVMe namespace block device):
+#   ansible-playbook ... -e 'rocm_xio_fio_smoke_filename=/dev/nvme0n1'
+---
+- name: Build rocm-xio and fio (rocm_xio engine)
+  hosts: all
+  become: true
+  roles:
+    - role: rocm_xio_fio

@@ -1,0 +1,105 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+---
+- name: Install build prerequisites
+  ansible.builtin.package:
+    name: "{{ rocm_xio_fio_packages }}"
+    state: present
+
+- name: Ensure install prefix directory exists
+  ansible.builtin.file:
+    path: "{{ rocm_xio_install_prefix }}"
+    state: directory
+    mode: "0755"
+
+- name: Clone rocm-xio
+  ansible.builtin.git:
+    repo: "{{ rocm_xio_git_repo }}"
+    version: "{{ rocm_xio_git_version }}"
+    dest: "{{ rocm_xio_build_dir }}"
+    force: true
+
+- name: Configure rocm-xio with CMake
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cmake -S . -B build \
+      -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX="{{ rocm_xio_install_prefix }}" \
+      -DCMAKE_PREFIX_PATH="{{ rocm_cmake_prefix_path }}" \
+      {% if rocm_xio_offload_arch | length > 0 %}-DOFFLOAD_ARCH="{{ rocm_xio_offload_arch }}" \
+      {% endif %}-DBUILD_SHARED_LIBS={{ 'ON' if rocm_xio_build_shared else 'OFF' }} \
+      -DBUILD_CLIENTS={{ 'ON' if rocm_xio_build_clients else 'OFF' }} {{ rocm_xio_cmake_extra }}
+  args:
+    chdir: "{{ rocm_xio_build_dir }}"
+  changed_when: true
+
+- name: Build and install rocm-xio
+  ansible.builtin.command:
+    cmd: cmake --build build --target install
+    chdir: "{{ rocm_xio_build_dir }}"
+  changed_when: true
+
+- name: Clone fio with rocm_xio engine
+  ansible.builtin.git:
+    repo: "{{ fio_git_repo }}"
+    version: "{{ fio_git_version }}"
+    dest: "{{ fio_build_dir }}"
+    force: true
+
+- name: Configure fio
+  ansible.builtin.shell: |
+    set -euo pipefail
+    ./configure --prefix="{{ rocm_xio_install_prefix }}" \
+      --enable-rocm-xio \
+      --with-rocm-xio="{{ rocm_xio_install_prefix }}" \
+      {{ fio_configure_extra }}
+  args:
+    chdir: "{{ fio_build_dir }}"
+    creates: "{{ fio_build_dir }}/config-host.mak"
+
+- name: Build and install fio
+  ansible.builtin.command:
+    cmd: make -j{{ ansible_processor_count | default(2) }} install
+    chdir: "{{ fio_build_dir }}"
+  changed_when: true
+
+- name: Verify rocm_xio engine is registered
+  ansible.builtin.command: "{{ rocm_xio_install_prefix }}/bin/fio --enghelp"
+  register: fio_enghelp
+  changed_when: false
+  failed_when: fio_enghelp.rc != 0
+
+- name: Assert fio lists rocm_xio ioengine
+  ansible.builtin.assert:
+    that:
+      - "'rocm_xio' in fio_enghelp.stdout"
+    fail_msg: "fio built without rocm_xio engine; check configure log."
+
+- name: Run optional smoke job (read-only)
+  ansible.builtin.command:
+    cmd: >
+      {{ rocm_xio_install_prefix }}/bin/fio
+      --ioengine=rocm_xio
+      --filename={{ rocm_xio_fio_smoke_filename }}
+      --thread=1
+      --direct=1
+      --rw=randread
+      --bs=4096
+      --size=1%
+      --time_based=1
+      --runtime={{ rocm_xio_fio_smoke_runtime }}
+      --iodepth={{ rocm_xio_fio_smoke_iodepth }}
+      --rocm_xio_queue_length={{ rocm_xio_fio_smoke_queue_length }}
+      --rocm_xio_queue_id={{ rocm_xio_fio_smoke_queue_id }}
+      --rocm_xio_gpu_id={{ rocm_xio_fio_smoke_gpu_id }}
+      --rocm_xio_memory_mode={{ rocm_xio_fio_smoke_memory_mode }}
+      --group_reporting=1
+  environment:
+    LD_LIBRARY_PATH: "{{ rocm_xio_install_prefix }}/lib:/opt/rocm/lib:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+    HSA_FORCE_FINE_GRAIN_PCIE: "1"
+  when: rocm_xio_fio_smoke_filename | length > 0
+  register: rocm_xio_smoke
+  changed_when: false
