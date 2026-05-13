@@ -1,0 +1,11 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+
+---
+- name: Install and test ROCm XIO fio integration
+  hosts: rocm_xio_fio
+  gather_facts: true
+  roles:
+    - role: ../roles/rocm_xio_fio

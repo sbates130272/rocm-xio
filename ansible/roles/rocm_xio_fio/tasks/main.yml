@@ -1,0 +1,221 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+
+---
+- name: Derive ROCm XIO and fio working paths
+  ansible.builtin.set_fact:
+    rocm_xio_fio_rocm_xio_source_dir: "{{ rocm_xio_fio_workspace }}/rocm-xio"
+    rocm_xio_fio_rocm_xio_build_dir: "{{ rocm_xio_fio_workspace }}/rocm-xio-build"
+    rocm_xio_fio_fio_source_dir: "{{ rocm_xio_fio_workspace }}/fio"
+
+- name: Validate ROCm XIO fio role inputs
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family == "Debian"
+      - rocm_xio_fio_workspace | length > 1
+      - rocm_xio_fio_rocm_xio_repo | length > 0
+      - rocm_xio_fio_rocm_xio_version | length > 0
+      - rocm_xio_fio_fio_repo | length > 0
+      - rocm_xio_fio_fio_version | length > 0
+      - rocm_xio_fio_install_prefix | length > 1
+    fail_msg: >-
+      rocm_xio_fio supports Debian-family hosts and requires explicit
+      repository, branch, workspace, and install-prefix variables.
+
+- name: Validate optional hardware test inputs
+  ansible.builtin.assert:
+    that:
+      - rocm_xio_fio_test_filename | length > 0
+      - >-
+        rocm_xio_fio_allow_destructive_test | bool or
+        ((rocm_xio_fio_test_rw | lower |
+        regex_search('write|trim')) is none)
+    fail_msg: >-
+      Set rocm_xio_fio_test_filename for hardware tests.  Write-like rw
+      modes also require rocm_xio_fio_allow_destructive_test=true.
+  when: rocm_xio_fio_run_hardware_test | bool
+
+- name: Install ROCm XIO fio build dependencies
+  ansible.builtin.apt:
+    name: "{{ rocm_xio_fio_apt_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+  when: rocm_xio_fio_install_packages | bool
+
+- name: Ensure ROCm XIO fio workspace exists
+  ansible.builtin.file:
+    path: "{{ rocm_xio_fio_workspace }}"
+    state: directory
+    owner: "{{ rocm_xio_fio_user }}"
+    group: "{{ rocm_xio_fio_group }}"
+    mode: "0755"
+  become: true
+
+- name: Clone ROCm XIO fio API branch
+  ansible.builtin.git:
+    repo: "{{ rocm_xio_fio_rocm_xio_repo }}"
+    dest: "{{ rocm_xio_fio_rocm_xio_source_dir }}"
+    version: "{{ rocm_xio_fio_rocm_xio_version }}"
+    update: true
+    force: true
+
+- name: Clone fio ROCm XIO engine branch
+  ansible.builtin.git:
+    repo: "{{ rocm_xio_fio_fio_repo }}"
+    dest: "{{ rocm_xio_fio_fio_source_dir }}"
+    version: "{{ rocm_xio_fio_fio_version }}"
+    update: true
+    force: true
+
+- name: Configure ROCm XIO
+  ansible.builtin.command:
+    cmd: >-
+      cmake -S {{ rocm_xio_fio_rocm_xio_source_dir }}
+      -B {{ rocm_xio_fio_rocm_xio_build_dir }}
+      -DROCM_PATH={{ rocm_xio_fio_rocm_path }}
+      -DCMAKE_INSTALL_PREFIX={{ rocm_xio_fio_install_prefix }}
+      -DCMAKE_BUILD_TYPE={{ rocm_xio_fio_build_type }}
+      -DINSTALL_TESTER=ON
+      -DBUILD_TESTING=ON
+      {% if rocm_xio_fio_offload_arch | length > 0 %}
+      -DOFFLOAD_ARCH={{ rocm_xio_fio_offload_arch }}
+      {% endif %}
+      {{ rocm_xio_fio_cmake_extra_args | join(' ') }}
+  environment: "{{ rocm_xio_fio_environment }}"
+  changed_when: true
+
+- name: Build ROCm XIO
+  ansible.builtin.command:
+    cmd: >-
+      cmake --build {{ rocm_xio_fio_rocm_xio_build_dir }}
+      --parallel {{ rocm_xio_fio_parallel_jobs }}
+  environment: "{{ rocm_xio_fio_environment }}"
+  changed_when: true
+
+- name: Install ROCm XIO
+  ansible.builtin.command:
+    cmd: cmake --install {{ rocm_xio_fio_rocm_xio_build_dir }}
+  environment: "{{ rocm_xio_fio_environment }}"
+  become: true
+  changed_when: true
+
+- name: Refresh dynamic linker cache
+  ansible.builtin.command:
+    cmd: ldconfig
+  become: true
+  changed_when: false
+  when: rocm_xio_fio_run_ldconfig | bool
+
+- name: Build ROCm XIO kernel module
+  ansible.builtin.command:
+    cmd: make -C {{ rocm_xio_fio_rocm_xio_source_dir }}/kernel/rocm-xio
+  changed_when: true
+  when: rocm_xio_fio_install_kernel_module | bool
+
+- name: Install ROCm XIO kernel module
+  ansible.builtin.command:
+    cmd: make -C {{ rocm_xio_fio_rocm_xio_source_dir }}/kernel/rocm-xio install
+  become: true
+  changed_when: true
+  when: rocm_xio_fio_install_kernel_module | bool
+
+- name: Load ROCm XIO kernel module
+  ansible.builtin.command:
+    cmd: modprobe rocm-xio
+  become: true
+  changed_when: false
+  when: rocm_xio_fio_install_kernel_module | bool
+
+- name: Find ROCm XIO udev rules
+  ansible.builtin.find:
+    paths: "{{ rocm_xio_fio_rocm_xio_source_dir }}/udev"
+    patterns: "*.rules"
+    file_type: file
+  register: rocm_xio_fio_udev_rules
+  when: rocm_xio_fio_install_udev_rules | bool
+
+- name: Install ROCm XIO udev rules
+  ansible.builtin.copy:
+    src: "{{ item.path }}"
+    dest: "/etc/udev/rules.d/{{ item.path | basename }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  loop: "{{ rocm_xio_fio_udev_rules.files | default([]) }}"
+  when: rocm_xio_fio_install_udev_rules | bool
+
+- name: Reload ROCm XIO udev rules
+  ansible.builtin.command:
+    cmd: udevadm control --reload-rules
+  become: true
+  changed_when: false
+  when: rocm_xio_fio_install_udev_rules | bool
+
+- name: Trigger ROCm XIO udev rules
+  ansible.builtin.command:
+    cmd: udevadm trigger
+  become: true
+  changed_when: false
+  when: rocm_xio_fio_install_udev_rules | bool
+
+- name: Configure fio with ROCm XIO
+  ansible.builtin.command:
+    cmd: >-
+      ./configure --with-rocm-xio={{ rocm_xio_fio_install_prefix }}
+      {{ rocm_xio_fio_configure_extra_args | join(' ') }}
+    chdir: "{{ rocm_xio_fio_fio_source_dir }}"
+  environment: "{{ rocm_xio_fio_environment }}"
+  changed_when: true
+
+- name: Build fio with ROCm XIO engine
+  ansible.builtin.command:
+    cmd: >-
+      make -j{{ rocm_xio_fio_parallel_jobs }}
+      {{ rocm_xio_fio_make_extra_args | join(' ') }}
+    chdir: "{{ rocm_xio_fio_fio_source_dir }}"
+  environment: "{{ rocm_xio_fio_environment }}"
+  changed_when: true
+
+- name: Verify fio can load the ROCm XIO engine
+  ansible.builtin.command:
+    cmd: ./fio --enghelp=rocm_xio
+    chdir: "{{ rocm_xio_fio_fio_source_dir }}"
+  environment: "{{ rocm_xio_fio_environment }}"
+  changed_when: false
+  when: rocm_xio_fio_run_smoke_test | bool
+
+- name: Render ROCm XIO fio hardware test job
+  ansible.builtin.template:
+    src: rocm-xio-test.fio.j2
+    dest: "{{ rocm_xio_fio_test_job_path }}"
+    owner: "{{ rocm_xio_fio_user }}"
+    group: "{{ rocm_xio_fio_group }}"
+    mode: "0644"
+  when: rocm_xio_fio_run_hardware_test | bool
+
+- name: Build ROCm XIO fio hardware test environment
+  ansible.builtin.set_fact:
+    rocm_xio_fio_test_environment: >-
+      {{
+        rocm_xio_fio_environment |
+        combine({
+          'HSA_FORCE_FINE_GRAIN_PCIE':
+            (rocm_xio_fio_test_force_fine_grain_pcie | bool) |
+            ternary('1', '0')
+        })
+      }}
+  when: rocm_xio_fio_run_hardware_test | bool
+
+- name: Run ROCm XIO fio hardware test
+  ansible.builtin.command:
+    cmd: "{{ rocm_xio_fio_fio_source_dir }}/fio {{ rocm_xio_fio_test_job_path }}"
+  environment: "{{ rocm_xio_fio_test_environment }}"
+  become: true
+  changed_when: false
+  when: rocm_xio_fio_run_hardware_test | bool

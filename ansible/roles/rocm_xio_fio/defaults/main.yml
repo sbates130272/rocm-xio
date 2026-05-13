@@ -1,0 +1,74 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+
+---
+rocm_xio_fio_workspace: /opt/rocm-xio-fio
+rocm_xio_fio_user: "{{ ansible_user_id }}"
+rocm_xio_fio_group: "{{ ansible_user_gid | default(ansible_user_id) }}"
+
+rocm_xio_fio_rocm_xio_repo: https://github.com/sbates130272/rocm-xio.git
+rocm_xio_fio_rocm_xio_version: dev/stebates/nvme-ep-fio-api
+rocm_xio_fio_fio_repo: https://github.com/sbates130272/fio.git
+rocm_xio_fio_fio_version: dev/batesste/rocm-xio-engine
+
+rocm_xio_fio_rocm_path: /opt/rocm
+rocm_xio_fio_install_prefix: "{{ rocm_xio_fio_rocm_path }}"
+rocm_xio_fio_build_type: Release
+rocm_xio_fio_offload_arch: ""
+rocm_xio_fio_parallel_jobs: "{{ ansible_processor_vcpus | default(4) }}"
+
+rocm_xio_fio_install_packages: true
+rocm_xio_fio_install_kernel_module: true
+rocm_xio_fio_install_udev_rules: true
+rocm_xio_fio_run_ldconfig: true
+rocm_xio_fio_run_smoke_test: true
+rocm_xio_fio_run_hardware_test: false
+rocm_xio_fio_allow_destructive_test: false
+
+rocm_xio_fio_apt_packages:
+  - build-essential
+  - cmake
+  - git
+  - kmod
+  - libaio-dev
+  - libdrm-dev
+  - libhsa-runtime-dev
+  - libnuma-dev
+  - linux-headers-{{ ansible_kernel }}
+  - pkg-config
+  - python3
+  - zlib1g-dev
+
+rocm_xio_fio_environment:
+  HIP_PLATFORM: amd
+  PATH: "{{ rocm_xio_fio_rocm_path }}/bin:{{ ansible_env.PATH }}"
+  LD_LIBRARY_PATH: "{{ rocm_xio_fio_install_prefix }}/lib:{{ rocm_xio_fio_rocm_path }}/lib:/usr/lib/x86_64-linux-gnu"
+
+rocm_xio_fio_cmake_extra_args: []
+rocm_xio_fio_configure_extra_args: []
+rocm_xio_fio_make_extra_args: []
+
+rocm_xio_fio_test_job_path: "{{ rocm_xio_fio_workspace }}/rocm-xio-test.fio"
+rocm_xio_fio_test_filename: ""
+rocm_xio_fio_test_runtime: 10s
+rocm_xio_fio_test_rw: randread
+rocm_xio_fio_test_bs: "512"
+rocm_xio_fio_test_size: 100%
+rocm_xio_fio_test_iodepth: 64
+rocm_xio_fio_test_direct: true
+rocm_xio_fio_test_thread: true
+rocm_xio_fio_test_group_reporting: true
+rocm_xio_fio_test_profile: true
+rocm_xio_fio_test_gpu_id: 0
+rocm_xio_fio_test_queue_length: 256
+rocm_xio_fio_test_memory_mode: 0
+rocm_xio_fio_test_precompute_prps: true
+rocm_xio_fio_test_sq_batch_size: 63
+rocm_xio_fio_test_cq_batch_size: 31
+rocm_xio_fio_test_pci_mmio_bridge: false
+rocm_xio_fio_test_force_fine_grain_pcie: true
+rocm_xio_fio_test_jobs:
+  - name: rocm_xio_queue_28
+    queue_id: 28

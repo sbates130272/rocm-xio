@@ -1,0 +1,30 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+
+[global]
+ioengine=rocm_xio
+filename={{ rocm_xio_fio_test_filename }}
+rocm_xio_profile={{ rocm_xio_fio_test_profile | bool | ternary(1, 0) }}
+rocm_xio_gpu_id={{ rocm_xio_fio_test_gpu_id }}
+rocm_xio_queue_length={{ rocm_xio_fio_test_queue_length }}
+rocm_xio_memory_mode={{ rocm_xio_fio_test_memory_mode }}
+rocm_xio_precompute_prps={{ rocm_xio_fio_test_precompute_prps | bool | ternary(1, 0) }}
+rocm_xio_sq_batch_size={{ rocm_xio_fio_test_sq_batch_size }}
+rocm_xio_cq_batch_size={{ rocm_xio_fio_test_cq_batch_size }}
+rocm_xio_pci_mmio_bridge={{ rocm_xio_fio_test_pci_mmio_bridge | bool | ternary(1, 0) }}
+direct={{ rocm_xio_fio_test_direct | bool | ternary(1, 0) }}
+thread={{ rocm_xio_fio_test_thread | bool | ternary(1, 0) }}
+iodepth={{ rocm_xio_fio_test_iodepth }}
+rw={{ rocm_xio_fio_test_rw }}
+bs={{ rocm_xio_fio_test_bs }}
+size={{ rocm_xio_fio_test_size }}
+group_reporting={{ rocm_xio_fio_test_group_reporting | bool | ternary(1, 0) }}
+time_based=1
+runtime={{ rocm_xio_fio_test_runtime }}
+
+{% for job in rocm_xio_fio_test_jobs %}
+[{{ job.name }}]
+rocm_xio_queue_id={{ job.queue_id }}
+{% endfor %}
