@@ -1,0 +1,28 @@
+#!/bin/bash
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Build rocm-xio plus fio rocm_xio engine through Ansible.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+ANSIBLE_PLAYBOOK="${ANSIBLE_PLAYBOOK:-ansible-playbook}"
+PLAYBOOK="${PLAYBOOK:-${REPO_ROOT}/scripts/ansible/playbooks/fio-rocm-xio.yml}"
+INVENTORY="${INVENTORY:-localhost,}"
+CONNECTION="${CONNECTION:-local}"
+ROCM_XIO_SOURCE_DIR="${ROCM_XIO_SOURCE_DIR:-${REPO_ROOT}}"
+FIO_BRANCH="${FIO_BRANCH:-dev/batesste/rocm-xio-engine}"
+ANSIBLE_CONFIG="${ANSIBLE_CONFIG:-${REPO_ROOT}/scripts/ansible/ansible.cfg}"
+export ANSIBLE_CONFIG
+
+"${ANSIBLE_PLAYBOOK}" \
+  -i "${INVENTORY}" \
+  -c "${CONNECTION}" \
+  "${PLAYBOOK}" \
+  -e "fio_rocm_xio_source_dir=${ROCM_XIO_SOURCE_DIR}" \
+  -e "fio_rocm_xio_branch=${FIO_BRANCH}" \
+  "$@"

@@ -1,0 +1,39 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+
+fio_rocm_xio_build_dependencies:
+  - build-essential
+  - cmake
+  - git
+  - libaio-dev
+  - libibverbs-dev
+  - libnuma-dev
+  - libpci-dev
+  - make
+  - pkg-config
+  - python3
+
+fio_rocm_xio_source_dir: /workspace
+fio_rocm_xio_build_dir: /opt/rocm-xio-build
+fio_rocm_xio_install_prefix: /opt/rocm-xio
+fio_rocm_xio_cmake_build_type: RelWithDebInfo
+
+fio_rocm_xio_repo_url: https://github.com/sbates130272/fio.git
+fio_rocm_xio_branch: dev/batesste/rocm-xio-engine
+fio_rocm_xio_checkout_dir: /opt/fio-rocm-xio
+fio_rocm_xio_install_dir: /opt/fio-rocm-xio-install
+fio_rocm_xio_make_jobs: "{{ ansible_processor_vcpus | default(4) }}"
+
+fio_rocm_xio_run_engine_smoke: true
+fio_rocm_xio_run_io_smoke: false
+fio_rocm_xio_smoke_filename: /dev/nvme0n1
+fio_rocm_xio_smoke_controller: /dev/nvme0
+fio_rocm_xio_smoke_nsid: 1
+fio_rocm_xio_smoke_runtime_sec: 5
+
+fio_rocm_xio_ld_library_paths:
+  - "{{ fio_rocm_xio_install_prefix }}/lib"
+  - /opt/rocs-ais/lib
+  - /opt/rocm/lib

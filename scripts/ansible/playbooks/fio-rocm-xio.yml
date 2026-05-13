@@ -1,0 +1,11 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+---
+- name: Build and validate fio rocm_xio integration
+  hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - role: fio_rocm_xio

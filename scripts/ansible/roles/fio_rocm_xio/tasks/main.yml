@@ -1,0 +1,159 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+
+- name: Install build dependencies
+  ansible.builtin.apt:
+    name: "{{ fio_rocm_xio_build_dependencies }}"
+    state: present
+    update_cache: true
+
+- name: Verify hipcc is present
+  ansible.builtin.command:
+    argv:
+      - which
+      - hipcc
+  register: fio_rocm_xio_hipcc
+  changed_when: false
+  failed_when: fio_rocm_xio_hipcc.rc != 0
+
+- name: Verify rocm-xio source tree exists
+  ansible.builtin.stat:
+    path: "{{ fio_rocm_xio_source_dir }}/CMakeLists.txt"
+  register: fio_rocm_xio_source_cmake
+
+- name: Fail if rocm-xio source tree is missing
+  ansible.builtin.fail:
+    msg: >-
+      fio_rocm_xio_source_dir={{ fio_rocm_xio_source_dir }} does not contain
+      CMakeLists.txt. Point fio_rocm_xio_source_dir to a rocm-xio checkout.
+  when: not fio_rocm_xio_source_cmake.stat.exists
+
+- name: Configure rocm-xio build
+  ansible.builtin.command:
+    argv:
+      - cmake
+      - -S
+      - "{{ fio_rocm_xio_source_dir }}"
+      - -B
+      - "{{ fio_rocm_xio_build_dir }}"
+      - "-DCMAKE_BUILD_TYPE={{ fio_rocm_xio_cmake_build_type }}"
+      - "-DCMAKE_INSTALL_PREFIX={{ fio_rocm_xio_install_prefix }}"
+  environment:
+    LD_LIBRARY_PATH: >-
+      {{ (fio_rocm_xio_ld_library_paths +
+      [ansible_env.LD_LIBRARY_PATH | default('')]) |
+      reject('equalto', '') | join(':') }}
+
+- name: Build rocm-xio
+  ansible.builtin.command:
+    argv:
+      - cmake
+      - --build
+      - "{{ fio_rocm_xio_build_dir }}"
+      - --parallel
+      - "{{ fio_rocm_xio_make_jobs | string }}"
+  environment:
+    LD_LIBRARY_PATH: >-
+      {{ (fio_rocm_xio_ld_library_paths +
+      [ansible_env.LD_LIBRARY_PATH | default('')]) |
+      reject('equalto', '') | join(':') }}
+
+- name: Install rocm-xio
+  ansible.builtin.command:
+    argv:
+      - cmake
+      - --install
+      - "{{ fio_rocm_xio_build_dir }}"
+  environment:
+    LD_LIBRARY_PATH: >-
+      {{ (fio_rocm_xio_ld_library_paths +
+      [ansible_env.LD_LIBRARY_PATH | default('')]) |
+      reject('equalto', '') | join(':') }}
+
+- name: Check out fio fork branch
+  ansible.builtin.git:
+    repo: "{{ fio_rocm_xio_repo_url }}"
+    dest: "{{ fio_rocm_xio_checkout_dir }}"
+    version: "{{ fio_rocm_xio_branch }}"
+    force: true
+
+- name: Configure fio with rocm_xio engine enabled
+  ansible.builtin.command:
+    argv:
+      - ./configure
+      - "--prefix={{ fio_rocm_xio_install_dir }}"
+      - --enable-rocm-xio
+      - "--with-rocm-xio={{ fio_rocm_xio_install_prefix }}"
+  args:
+    chdir: "{{ fio_rocm_xio_checkout_dir }}"
+  environment:
+    LD_LIBRARY_PATH: >-
+      {{ (fio_rocm_xio_ld_library_paths +
+      [ansible_env.LD_LIBRARY_PATH | default('')]) |
+      reject('equalto', '') | join(':') }}
+
+- name: Build fio
+  ansible.builtin.command:
+    argv:
+      - make
+      - "-j{{ fio_rocm_xio_make_jobs }}"
+  args:
+    chdir: "{{ fio_rocm_xio_checkout_dir }}"
+  environment:
+    LD_LIBRARY_PATH: >-
+      {{ (fio_rocm_xio_ld_library_paths +
+      [ansible_env.LD_LIBRARY_PATH | default('')]) |
+      reject('equalto', '') | join(':') }}
+
+- name: Install fio
+  ansible.builtin.command:
+    argv:
+      - make
+      - install
+  args:
+    chdir: "{{ fio_rocm_xio_checkout_dir }}"
+  environment:
+    LD_LIBRARY_PATH: >-
+      {{ (fio_rocm_xio_ld_library_paths +
+      [ansible_env.LD_LIBRARY_PATH | default('')]) |
+      reject('equalto', '') | join(':') }}
+
+- name: Verify rocm_xio engine registration
+  ansible.builtin.command:
+    argv:
+      - "{{ fio_rocm_xio_checkout_dir }}/fio"
+      - --enghelp=rocm_xio
+  register: fio_rocm_xio_enghelp
+  changed_when: false
+  when: fio_rocm_xio_run_engine_smoke | bool
+  environment:
+    LD_LIBRARY_PATH: >-
+      {{ (fio_rocm_xio_ld_library_paths +
+      [ansible_env.LD_LIBRARY_PATH | default('')]) |
+      reject('equalto', '') | join(':') }}
+
+- name: Run optional fio io smoke test
+  ansible.builtin.command:
+    argv:
+      - "{{ fio_rocm_xio_checkout_dir }}/fio"
+      - --name=rocm_xio_smoke
+      - --ioengine=rocm_xio
+      - --thread=1
+      - --direct=1
+      - --rw=randread
+      - --bs=4k
+      - --iodepth=1
+      - --numjobs=1
+      - --time_based=1
+      - "--runtime={{ fio_rocm_xio_smoke_runtime_sec | string }}"
+      - "--filename={{ fio_rocm_xio_smoke_filename }}"
+      - "--rocm_xio_controller={{ fio_rocm_xio_smoke_controller }}"
+      - "--rocm_xio_nsid={{ fio_rocm_xio_smoke_nsid | string }}"
+  when: fio_rocm_xio_run_io_smoke | bool
+  environment:
+    LD_LIBRARY_PATH: >-
+      {{ (fio_rocm_xio_ld_library_paths +
+      [ansible_env.LD_LIBRARY_PATH | default('')]) |
+      reject('equalto', '') | join(':') }}
