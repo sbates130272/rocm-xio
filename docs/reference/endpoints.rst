@@ -26,7 +26,13 @@ required.
 
 .. code-block:: bash
 
-   sudo ./build/xio-tester test-ep --verbose
+   ./build/xio-tester test-ep --emulate --verify --less-timing
+
+Use ``--emulate`` to run the endpoint kernel logic on CPU threads. This
+mode is covered by CTest and is useful in CI environments without a GPU.
+When combined with ``--verify``, ``test-ep`` fills each SQE payload with
+an LFSR pattern and reports verification pass/fail counts after the
+round-trip completes.
 
 ``nvme-ep`` -- NVMe endpoint
 ----------------------------

@@ -104,13 +104,15 @@ These run in CI without hardware:
   ``ExtractBusNumber``, ``GetBusIdDistance``, ``GetLcaDepth``
 - ``test-extract-endpoint`` -- CLI argument parser:
   ``extractEndpointName()``
-- ``test-ep-config`` -- test-ep configuration defaults
+- ``test-ep-config`` -- test-ep configuration defaults and validation
 
 System tests
 ------------
 
-- ``test-ep-emulate`` -- Full SQE/CQE round-trip in emulation mode
-  (GPU required)
+- ``test-ep-emulate`` -- Library-level SQE/CQE round-trip in emulation
+  mode, including LFSR verification (CPU-only)
+- ``test-ep-cli-emulate*`` -- ``xio-tester test-ep --emulate`` smoke,
+  verification, doorbell, and expected-failure coverage (CPU-only)
 
 Hardware tests
 --------------
@@ -463,8 +465,8 @@ The GitHub Actions workflows run tests as follows:
 
 - **build-check**: ``ctest -L "unit"`` -- CPU-only tests in a
   ``rocm/dev-ubuntu-24.04:7.2`` container (no GPU)
-- **test-emulate**: ``ctest -L "unit"`` plus
-  ``xio-tester test-ep --emulate`` (no GPU, emulation mode)
+- **test-emulate**: ``ctest -L "unit"`` plus ``ctest -L "emulate"``
+  (no GPU, emulation mode)
 
 Hardware and sweep tests are not run in CI -- they require physical
 NIC and GPU hardware.

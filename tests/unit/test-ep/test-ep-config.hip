@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 
 #include <hip/hip_runtime.h>
 
@@ -60,6 +61,22 @@ int test_config_defaults() {
   ASSERT_EQ(cfg.doorbell, 0u);
   ASSERT_TRUE(!cfg.emulate);
   ASSERT_EQ(cfg.iterations, 128u);
+  ASSERT_TRUE(!cfg.verify);
+  ASSERT_EQ(cfg.seed, 1u);
+  return 0;
+}
+
+int test_config_validation() {
+  xio::test_ep::TestEpConfig cfg;
+  ASSERT_EQ(xio::test_ep::validateConfig(&cfg), std::string());
+
+  cfg.iterations = 0;
+  ASSERT_TRUE(!xio::test_ep::validateConfig(&cfg).empty());
+
+  cfg.iterations = 1;
+  cfg.enableCpuThreads = false;
+  ASSERT_TRUE(!xio::test_ep::validateConfig(&cfg).empty());
+
   return 0;
 }
 
@@ -76,6 +93,7 @@ int main() {
   failures += test_sqe_struct_layout();
   failures += test_cqe_struct_layout();
   failures += test_config_defaults();
+  failures += test_config_validation();
   failures += test_type_aliases();
 
   if (failures == 0) {
