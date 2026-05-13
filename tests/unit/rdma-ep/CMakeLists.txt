@@ -15,6 +15,14 @@ xio_add_test(
 )
 
 xio_add_test(
+  NAME test-rdma-validate-extra
+  SOURCE test-rdma-validate-extra.hip
+  LABELS unit rdma
+  TIMEOUT 30
+  INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/src/endpoints/rdma-ep
+)
+
+xio_add_test(
   NAME test-rdma-vendors
   SOURCE test-rdma-vendors.hip
   LABELS unit rdma
