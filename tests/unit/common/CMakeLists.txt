@@ -38,3 +38,31 @@ xio_add_test(
   LABELS unit common
   TIMEOUT 30
 )
+
+xio_add_test(
+  NAME test-xio-env
+  SOURCE test-xio-env.hip
+  LABELS unit common
+  TIMEOUT 30
+)
+
+xio_add_test(
+  NAME test-xio-com
+  SOURCE test-xio-com.hip
+  LABELS unit common
+  TIMEOUT 30
+)
+
+xio_add_test(
+  NAME test-xio-timing
+  SOURCE test-xio-timing.hip
+  LABELS unit common
+  TIMEOUT 60
+)
+
+xio_add_test(
+  NAME test-pci-mmio-bridge
+  SOURCE test-pci-mmio-bridge.hip
+  LABELS unit common
+  TIMEOUT 30
+)
