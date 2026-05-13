@@ -7,7 +7,14 @@
 # hardware-oriented environment. Requires sudo.
 #
 # Usage:
-#   ./run-ctests.sh [bnxt|ionic|mlx5|all] [-- ctest-args...]
+#   ./run-ctests.sh [--] [bnxt|ionic|mlx5|all] [--] [ctest-option...]
+#
+# All arguments after the optional vendor keyword are passed through to
+# ctest unchanged (after stripping optional "--" sentinels used only by this
+# wrapper). Examples:
+#   ./run-ctests.sh -R nvme-verify-seq-host-mem -V
+#   ./run-ctests.sh ionic -LE rdma --output-on-failure
+#   ./run-ctests.sh bnxt -- -R '^rdma-xio-loopback' --output-on-failure
 #
 # Optional first argument selects the RDMA vendor passed to
 # setup-rdma-loopback.sh (default: bnxt). You can also set VENDOR in the
@@ -26,6 +33,12 @@ if [[ "${1:-}" == "--" ]]; then
   shift
 elif [[ "${1:-}" =~ ^(bnxt|ionic|mlx5|all)$ ]]; then
   export VENDOR="$1"
+  shift
+fi
+
+# Allow ./run-ctests.sh <vendor> -- <ctest-args> so ctest never sees a bare
+# "--" from the wrapper.
+if [[ "${1:-}" == "--" ]]; then
   shift
 fi
 
@@ -75,4 +88,5 @@ if [[ -n "${ROCXIO_RDMA_DEVICE:-}" ]]; then
   ENV_ARGS+=("ROCXIO_RDMA_DEVICE=${ROCXIO_RDMA_DEVICE}")
 fi
 
+# Remaining "$@" are forwarded to ctest after our default flags.
 sudo env "${ENV_ARGS[@]}" ctest "${CTEST_ARGS[@]}" "$@"

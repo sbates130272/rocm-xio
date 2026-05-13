@@ -271,7 +271,7 @@ xio_add_script_test(
   NAME nvme-verify-seq-device-mem-multi-lba
   SCRIPT ${_verify_wrapper}
   LABELS hardware nvme verify
-  TIMEOUT 120
+  TIMEOUT 30
   ARGS ${_seq_script}
   ENVIRONMENT
     "MEMORY_MODE=8"
