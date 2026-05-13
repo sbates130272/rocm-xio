@@ -49,6 +49,14 @@ xio_add_test(
     ${CMAKE_SOURCE_DIR}/src/endpoints/rdma-ep/bnxt
 )
 
+xio_add_test(
+  NAME test-rdma-vendor-constants
+  SOURCE test-rdma-vendor-constants.hip
+  LABELS unit rdma
+  TIMEOUT 30
+  INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/src/endpoints/rdma-ep
+)
+
 # Hardware setup fixture (runs once before all
 # hardware tests via FIXTURES_REQUIRED)
 if(GDA_BNXT OR GDA_IONIC OR GDA_ERNIC)

@@ -22,6 +22,14 @@ xio_add_test(
     ${CMAKE_SOURCE_DIR}/src/common
 )
 
+xio_add_test(
+  NAME test-nvme-ep-constants
+  SOURCE test-nvme-ep-constants.hip
+  LABELS unit nvme
+  TIMEOUT 30
+  INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/src/endpoints/nvme-ep
+)
+
 # Hardware integration tests (require real NVMe device)
 xio_add_test(
   NAME test-nvme-hardware

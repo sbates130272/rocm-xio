@@ -69,6 +69,7 @@ Label         Definition
 ``sweep``     Parameterized multi-seed loopback runs
 ``stress``    Long-running (timeout: 600 seconds)
 ``rdma``      RDMA-related test
+``sdma``      SDMA opcode header constants (CPU-only)
 ``common``    Common library utilities
 ``fixture``   CTest fixture (setup/teardown)
 ============  =========================================
@@ -105,8 +106,22 @@ These run in CI without hardware:
 - ``test-extract-endpoint`` -- CLI argument parser:
   ``extractEndpointName()``
 - ``test-ep-config`` -- test-ep configuration defaults
-
-System tests
+- ``test-test-ep-constants`` -- ``magicId``, ``cqeMagicId``, ``sqeSize``,
+  ``cqeSize`` constants
+- ``test-xio-timing`` -- ``updateTimingStats()`` host aggregation
+- ``test-xio-env-helpers`` -- ``getEnvInt()`` / ``getEnvStr()`` parsing
+- ``test-xio-endpoint-core-layout`` -- ``XioTimingStats``,
+  ``XioSubstepStats``, ``XioEndpointConfig`` defaults
+- ``test-tcp-exchange-layout`` -- packed ``ExchangeMsg`` layout and default
+  TCP port
+- ``test-tcp-exchange-io`` -- ``tcp_send_all()`` / ``tcp_recv_all()`` over a
+  Unix ``socketpair()``
+- ``test-sdma-opcodes`` -- ``SDMA_OP_*`` constants (and OSS7 sub-opcodes when
+  ``XIO_SDMA_OSS7`` is enabled)
+- ``test-nvme-ep-constants`` -- NVMe-ep macro and ``constexpr`` doorbell /
+  buffer size constants
+- ``test-rdma-vendor-constants`` -- PCI vendor IDs, ``WF_SIZE``, descriptor
+  offsets (complements ``test-rdma-vendors``)
 ------------
 
 - ``test-ep-emulate`` -- Full SQE/CQE round-trip in emulation mode

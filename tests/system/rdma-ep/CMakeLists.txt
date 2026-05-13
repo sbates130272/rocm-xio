@@ -97,6 +97,38 @@ xio_add_script_test(
 set_tests_properties(rdma-xio-loopback-4k PROPERTIES
   FIXTURES_REQUIRED RDMA_HW)
 
+xio_add_script_test(
+  NAME rdma-xio-loopback-64
+  SCRIPT ${_wrapper}
+  LABELS hardware rdma verify
+  TIMEOUT 120
+  ARGS ${_xio_script}
+  ENVIRONMENT
+    "TRANSFER_SIZE=64"
+    "LFSR_SEED=0xabcd"
+    "ITERATIONS=1"
+    "TEST_BIN=${_test_bin}"
+    "RDMA_CORE_LIB=${_rdma_lib}"
+)
+set_tests_properties(rdma-xio-loopback-64 PROPERTIES
+  FIXTURES_REQUIRED RDMA_HW)
+
+xio_add_script_test(
+  NAME rdma-xio-loopback-8192
+  SCRIPT ${_wrapper}
+  LABELS hardware rdma verify
+  TIMEOUT 120
+  ARGS ${_xio_script}
+  ENVIRONMENT
+    "TRANSFER_SIZE=8192"
+    "LFSR_SEED=0xdcba"
+    "ITERATIONS=1"
+    "TEST_BIN=${_test_bin}"
+    "RDMA_CORE_LIB=${_rdma_lib}"
+)
+set_tests_properties(rdma-xio-loopback-8192 PROPERTIES
+  FIXTURES_REQUIRED RDMA_HW)
+
 # --- xio-tester batch-size 4 -----------------------
 
 xio_add_script_test(
