@@ -63,7 +63,7 @@ run_failure() {
   shift
   local output
 
-  if output="$("$XIO_TESTER" test-ep --emulate "$@" 2>&1); then
+  if output="$("$XIO_TESTER" test-ep --emulate "$@" 2>&1)"; then
     echo "FAIL: expected command to fail"
     echo "$output"
     exit 1

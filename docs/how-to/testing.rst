@@ -32,7 +32,7 @@ The project provides six test presets in ``CMakePresets.json``:
 Preset             Description                     Hardware
 =================  ==============================  ================
 ``unit``           CPU-only unit tests             CPU-only
-``system``         System tests (emulation)        GPU-only
+``system``         System tests                    CPU-only or GPU
 ``hardware``       Hardware integration tests      GPU + RDMA NIC
 ``sweep``          Multi-seed loopback sweep       GPU + RDMA NIC
 ``integration``    Install-integration examples    CPU-only
@@ -64,7 +64,8 @@ Every test carries one or more CTest labels for filtering with
 Label         Definition
 ============  =========================================
 ``unit``      CPU-only, no GPU or NIC (runs in CI)
-``system``    Needs a `HIP-capable GPU`_
+``system``    System-level tests; some are CPU-only emulation tests,
+              others need a `HIP-capable GPU`_
 ``hardware``  Needs a GPU and a specific RDMA NIC
 ``sweep``     Parameterized multi-seed loopback runs
 ``stress``    Long-running (timeout: 600 seconds)
