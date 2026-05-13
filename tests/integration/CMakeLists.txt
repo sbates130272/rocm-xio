@@ -20,6 +20,14 @@ xio_add_install_test(
     ${CMAKE_SOURCE_DIR}/examples/find-package
 )
 
+# Compile-only: verify exported target includes and
+# endpoint-registry API are usable from an installed package.
+xio_add_install_test(
+  NAME package-headers
+  SOURCE_DIR
+    ${CMAKE_CURRENT_SOURCE_DIR}/package-headers
+)
+
 # Compile + run: list available endpoints.
 xio_add_install_test(
   NAME list-endpoints

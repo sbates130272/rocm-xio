@@ -139,6 +139,15 @@ xio_add_script_test(
 )
 
 xio_add_script_test(
+  NAME nvme-smoke-batch-32
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme smoke
+  TIMEOUT 30
+  ARGS ${_smoke_common} --batch-size 32
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
+)
+
+xio_add_script_test(
   NAME nvme-smoke-batch-0
   SCRIPT ${_smoke_wrapper}
   LABELS hardware nvme smoke
@@ -179,6 +188,15 @@ xio_add_script_test(
 )
 
 xio_add_script_test(
+  NAME nvme-smoke-queues-8
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme smoke
+  TIMEOUT 30
+  ARGS ${_smoke_common} --num-queues 8
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
+)
+
+xio_add_script_test(
   NAME nvme-smoke-queues-2-batch-16
   SCRIPT ${_smoke_wrapper}
   LABELS hardware nvme smoke
@@ -210,6 +228,15 @@ xio_add_script_test(
   TIMEOUT 30
   ARGS ${_smoke_common}
     -m 3 --less-timing --batch-size 4
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
+)
+
+xio_add_script_test(
+  NAME nvme-smoke-memmode-11
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme smoke
+  TIMEOUT 30
+  ARGS ${_smoke_common} -m 11 --less-timing --batch-size 4
   ENVIRONMENT "XIO_TESTER=${_xio_tester}"
 )
 
@@ -368,6 +395,17 @@ xio_add_script_test(
   LABELS hardware nvme negative
   TIMEOUT 15
   ARGS --batch-size 1024 --read-io 1
+  ENVIRONMENT
+    "XIO_TESTER=${_xio_tester}"
+    "EXPECT_FAIL=1"
+)
+
+xio_add_script_test(
+  NAME nvme-reject-num-queues-0
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme negative
+  TIMEOUT 15
+  ARGS --num-queues 0 --read-io 1
   ENVIRONMENT
     "XIO_TESTER=${_xio_tester}"
     "EXPECT_FAIL=1"

@@ -12,3 +12,11 @@ xio_add_test(
   TIMEOUT 120
   INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/src/endpoints/test-ep
 )
+
+xio_add_test(
+  NAME test-ep-emulate-doorbell
+  SOURCE test-ep-emulate-doorbell.hip
+  LABELS system test-ep
+  TIMEOUT 120
+  INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/src/endpoints/test-ep
+)
