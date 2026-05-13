@@ -4,37 +4,43 @@
  *
  * System-level test for test-ep in emulate mode.
  *
- * Validates the full SQE/CQE roundtrip using CPU emulation threads. This
- * exercises the same code path as `xio-tester test-ep --emulate` but through
- * the library API with a minimal configuration.
+ * Validates SQE/CQE round-trips through the library API (the same endpoint
+ * logic as ``xio-tester test-ep --emulate``) for polling mode, doorbell mode,
+ * and multi-thread polling. CLI coverage for ``xio-tester`` is registered
+ * separately as CTest entries in ``CMakeLists.txt``.
  */
 
-#include <cassert>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 
 #include <hip/hip_runtime.h>
 
 #include "test-ep.h"
-#include "xio-test-assert.h"
 #include "xio.h"
 
-int test_emulate_roundtrip() {
-  const unsigned kIter = 10;
-  const unsigned kThreads = 1;
+namespace {
 
-  xio::XioEndpointConfig cfg(kIter, kThreads);
+/** Match TestEndpoint::getSubmissionQueueLength sizing rules. */
+size_t submission_slots(unsigned num_threads, unsigned doorbell) {
+  if (doorbell > 0) {
+    return doorbell;
+  }
+  return (num_threads > 1) ? num_threads : 1;
+}
+
+int run_emulate(unsigned iterations, unsigned num_threads, unsigned doorbell) {
+  xio::XioEndpointConfig cfg(iterations, num_threads);
 
   xio::test_ep::TestEpConfig epCfg;
   epCfg.emulate = true;
   epCfg.enableCpuThreads = true;
-  epCfg.iterations = kIter;
+  epCfg.iterations = iterations;
+  epCfg.doorbell = doorbell;
   cfg.endpointConfig = &epCfg;
 
-  size_t sqSize = kThreads * sizeof(xio::test_ep::test_sqe);
-  size_t cqSize = kThreads * sizeof(xio::test_ep::test_cqe);
+  const size_t slots = submission_slots(num_threads, doorbell);
+  const size_t sqSize = slots * sizeof(xio::test_ep::test_sqe);
+  const size_t cqSize = slots * sizeof(xio::test_ep::test_cqe);
 
   void *sq = nullptr, *cq = nullptr;
   hipError_t sq_err = xio::allocHostMemory(sqSize, &sq, "emulate SQ",
@@ -63,9 +69,25 @@ int test_emulate_roundtrip() {
   return 0;
 }
 
+} // namespace
+
+int test_emulate_polling_basic() {
+  return run_emulate(10, 1, 0);
+}
+
+int test_emulate_doorbell() {
+  return run_emulate(12, 1, 64);
+}
+
+int test_emulate_multi_thread_polling() {
+  return run_emulate(8, 4, 0);
+}
+
 int main() {
   int failures = 0;
-  failures += test_emulate_roundtrip();
+  failures += test_emulate_polling_basic();
+  failures += test_emulate_doorbell();
+  failures += test_emulate_multi_thread_polling();
 
   if (failures == 0) {
     printf("All test-ep emulate tests passed.\n");

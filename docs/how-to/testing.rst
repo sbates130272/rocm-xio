@@ -71,6 +71,7 @@ Label         Definition
 ``rdma``      RDMA-related test
 ``common``    Common library utilities
 ``fixture``   CTest fixture (setup/teardown)
+``cli``       ``xio-tester`` smoke tests (subset of ``system``)
 ============  =========================================
 
 .. _HIP-capable GPU: https://rocm.docs.amd.com/projects/install-on-linux/en/latest/reference/system-requirements.html#supported-gpus
@@ -109,8 +110,14 @@ These run in CI without hardware:
 System tests
 ------------
 
-- ``test-ep-emulate`` -- Full SQE/CQE round-trip in emulation mode
-  (GPU required)
+- ``test-ep-emulate`` -- Emulate-mode API tests: basic polling, doorbell
+  queue (length 64), and multi-thread polling (GPU required)
+- ``test-ep-cli-emulate-basic`` -- ``xio-tester test-ep --emulate`` smoke
+  (``BUILD_CLIENTS=ON``; labels ``system``, ``test-ep``, ``cli``)
+- ``test-ep-cli-emulate-doorbell`` -- Emulate mode with ``--doorbell 64``
+- ``test-ep-cli-emulate-verify`` -- Emulate mode with ``--verify``
+- ``test-ep-cli-emulate-doorbell-verify`` -- Emulate mode with doorbell and
+  ``--verify``
 
 Hardware tests
 --------------
@@ -463,8 +470,9 @@ The GitHub Actions workflows run tests as follows:
 
 - **build-check**: ``ctest -L "unit"`` -- CPU-only tests in a
   ``rocm/dev-ubuntu-24.04:7.2`` container (no GPU)
-- **test-emulate**: ``ctest -L "unit"`` plus
-  ``xio-tester test-ep --emulate`` (no GPU, emulation mode)
+- **test-emulate**: ``ctest -L "unit"`` plus ``xio-tester test-ep``
+  ``--emulate`` smoke steps (also available as CTest ``test-ep-cli-*``
+  when ``BUILD_CLIENTS=ON``)
 
 Hardware and sweep tests are not run in CI -- they require physical
 NIC and GPU hardware.
