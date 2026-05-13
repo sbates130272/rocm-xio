@@ -111,8 +111,8 @@ These run in CI without hardware:
 - ``test-nvme-config`` -- NVMe command/status constants and config defaults
 - ``test-nvme-helpers`` -- NVMe SQE/CQE helpers, PRP edge cases, and data
   pattern verification
-- ``test-sdma-config`` -- SDMA endpoint config validation and host-visible
-  type defaults
+- ``test-sdma-config`` -- SDMA endpoint config validation and host-visible type
+  defaults
 - ``test-ep-config`` -- test-ep configuration defaults and SQE/CQE layout
 
 System tests
