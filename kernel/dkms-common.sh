@@ -3,6 +3,8 @@
 #
 # SPDX-License-Identifier: MIT
 #
+# shellcheck shell=bash
+#
 # Shared DKMS lifecycle helpers sourced by the
 # per-driver setup-*-dkms.sh scripts.
 #

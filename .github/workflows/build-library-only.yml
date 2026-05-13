@@ -23,7 +23,17 @@ on:
       - '**.cc'
       - 'CMakeLists.txt'
       - 'cmake/**'
+      - 'CMakePresets.json'
       - 'examples/**'
+      - '.github/actions/setup-rocm-build/**'
+      - '.github/workflows/build-library-only.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   library-no-cli11:
@@ -39,9 +49,14 @@ jobs:
       uses: actions/checkout@v5.0.0
 
     - name: Install dependencies (no libcli11-dev)
+      uses: ./.github/actions/setup-rocm-build
+      with:
+        apt-packages: >-
+          cmake
+          libdrm-dev
+
+    - name: Verify libcli11-dev is absent
       run: |
-        apt-get update
-        apt-get install -y cmake libdrm-dev
         dpkg -l libcli11-dev 2>/dev/null && \
           { echo "FAIL: libcli11-dev must not be installed"; exit 1; } || \
           echo "OK: libcli11-dev is not installed"

@@ -40,6 +40,7 @@ PKG_VERSION="${BASE_VERSION}-g${GIT_REV}"
 KERNEL_TAG=""
 WORK_DIR="/tmp/rocm-xio-bnxt-re-build"
 BUILD_ONLY=false
+# shellcheck disable=SC2034
 UNINSTALL=false
 
 # googlesource provides per-directory tarballs
@@ -73,6 +74,7 @@ while [[ $# -gt 0 ]]; do
     --build-only)
       BUILD_ONLY=true; shift ;;
     --uninstall)
+      # shellcheck disable=SC2034
       UNINSTALL=true; shift ;;
     -h|--help)
       echo "Usage: $0 [--kernel-tag vX.Y]" \

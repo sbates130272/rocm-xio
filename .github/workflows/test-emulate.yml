@@ -1,3 +1,7 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+
 name: test-emulate
 
 on:
@@ -15,8 +19,18 @@ on:
       - '**.cc'
       - 'CMakeLists.txt'
       - 'cmake/**'
+      - 'CMakePresets.json'
       - 'scripts/**'
       - 'Makefile'
+      - '.github/actions/setup-rocm-build/**'
+      - '.github/workflows/test-emulate.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test-emulate:
@@ -31,24 +45,20 @@ jobs:
     - name: Check out code.
       uses: actions/checkout@v5.0.0
     - name: Install additional dependencies
-      run: |
-        apt-get update
-        apt-get install -y \
-          cmake \
-          curl \
-          libcli11-dev \
+      uses: ./.github/actions/setup-rocm-build
+      with:
+        apt-packages: >-
+          cmake
+          curl
+          libcli11-dev
           libdrm-dev
     - name: Build (with ROCm for compilation, but will run in emulate mode)
       run: |
-        mkdir -p build && cd build
-        cmake -DOFFLOAD_ARCH=gfx942:xnack+ \
-          -DROCM_PATH=/opt/rocm \
-          -DBUILD_TESTING=ON ..
-        cmake --build . --target all
+        cmake --preset ci-rocm
+        cmake --build --preset ci-rocm --target all
     - name: Run unit tests (CPU-only).
       run: |
-        ctest --test-dir build -V -L "unit" \
-          --parallel --output-on-failure
+        ctest --preset unit --parallel
     - name: Run tester using test-ep in emulate mode
       run: |
         ./build/xio-tester test-ep --emulate -n 100 -t 1 -v

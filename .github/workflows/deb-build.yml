@@ -11,6 +11,23 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - '**.hip'
+      - '**.cpp'
+      - '**.c'
+      - '**.h'
+      - '**.hpp'
+      - '**.cc'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - 'debian/**'
+      - 'kernel/**'
+      - 'rdma-core/**'
+      - 'scripts/**'
+      - 'src/**'
+      - 'udev/**'
+      - '.github/actions/setup-rocm-build/**'
+      - '.github/workflows/deb-build.yml'
   workflow_dispatch:
     inputs:
       offload_arch:
@@ -20,7 +37,11 @@ on:
         required: false
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-debs:
@@ -46,17 +67,29 @@ jobs:
           >> "$GITHUB_ENV"
 
     - name: Install build dependencies
+      uses: ./.github/actions/setup-rocm-build
+      with:
+        apt-packages: >-
+          devscripts
+          equivs
+          lsb-release
+          python3-pip
+          python3-venv
+
+    - name: Install Debian package dependencies
       run: |
-        apt-get update
-        apt-get install -y devscripts equivs lsb-release python3-pip
         mk-build-deps --install --remove \
           --tool 'apt-get -y --no-install-recommends' \
           debian/control
 
     - name: Install rocm-kpack Python tools
       run: |
-        pip install --break-system-packages \
+        python3 -m venv .venv
+        . .venv/bin/activate
+        python -m pip install --upgrade pip
+        python -m pip install \
           "rocm-kpack @ git+https://github.com/ROCm/rocm-kpack.git@main"
+        echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
     - name: Generate debian/changelog
       run: debian/gen-changelog.sh
@@ -85,6 +118,7 @@ jobs:
     - name: Stage built packages
       run: |
         mkdir -p built-debs
+        cp debian/generated-release-notes.md built-debs/generated-release-notes.md
         for f in ../*.deb ../*.buildinfo ../*.changes; do
           if [ -f "$f" ]; then
             base="$(basename "$f")"
@@ -98,13 +132,26 @@ jobs:
         name: rocm-xio-debs-rolling-${{ github.sha }}
         path: built-debs/
 
+  publish-rolling:
+    name: Update rolling package pre-release
+    needs: build-debs
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Download .deb artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: rocm-xio-debs-rolling-${{ github.sha }}
+        path: built-debs/
+
     - name: Update rolling package pre-release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v2
       with:
         tag_name: rocm-xio-latest
-        name: Pre-release packages — tag rocm-xio-latest
-        body_path: debian/generated-release-notes.md
+        name: Pre-release packages - tag rocm-xio-latest
+        body_path: built-debs/generated-release-notes.md
         prerelease: true
         make_latest: false
-        files: built-debs/*
+        files: built-debs/rocm-xio-latest-*
