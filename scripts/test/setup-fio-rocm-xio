@@ -1,0 +1,81 @@
+#!/bin/bash
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Build and validate the fio rocm_xio engine using Ansible.
+#
+# Defaults run against localhost with ansible_connection=local.
+# To target a VM forwarded on localhost:2222 set TARGET_MODE=vm.
+#
+# Optional environment variables:
+#   TARGET_MODE        local (default) or vm
+#   VM_USERNAME        SSH username for TARGET_MODE=vm
+#   VM_PASS            SSH password for TARGET_MODE=vm
+#   SSH_PORT           SSH port for TARGET_MODE=vm (default: 2222)
+#   FIO_REPO_URL       fio repository URL
+#   FIO_BRANCH         fio branch to checkout
+#   FIO_CHECKOUT_DIR   checkout path on target host
+#   FIO_ROCM_XIO_PATH  ROCm XIO install prefix (default: /opt/rocs-ais)
+#   FIO_HIPCC_PATH     hipcc path or command (default: hipcc)
+#   FIO_RUN_SMOKE      true/false (default: false)
+#   FIO_SMOKE_FILENAME block device path for smoke test
+
+set -euo pipefail
+
+TARGET_MODE="${TARGET_MODE:-local}"
+VM_USERNAME="${VM_USERNAME:-${USER}}"
+VM_PASS="${VM_PASS:-password}"
+SSH_PORT="${SSH_PORT:-2222}"
+
+FIO_REPO_URL="${FIO_REPO_URL:-https://github.com/sbates130272/fio.git}"
+FIO_BRANCH="${FIO_BRANCH:-dev/batesste/rocm-xio-engine}"
+FIO_CHECKOUT_DIR="${FIO_CHECKOUT_DIR:-/opt/fio-rocm-xio}"
+FIO_ROCM_XIO_PATH="${FIO_ROCM_XIO_PATH:-/opt/rocs-ais}"
+FIO_HIPCC_PATH="${FIO_HIPCC_PATH:-hipcc}"
+FIO_RUN_SMOKE="${FIO_RUN_SMOKE:-false}"
+FIO_SMOKE_FILENAME="${FIO_SMOKE_FILENAME:-}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PLAYBOOK="${ROOT_DIR}/scripts/ansible/playbooks/fio-rocm-xio.yml"
+
+if [ ! -f "${PLAYBOOK}" ]; then
+  echo "ERROR: Playbook not found: ${PLAYBOOK}"
+  exit 1
+fi
+
+TMPDIR="$(mktemp -d)"
+trap 'rm -rf "${TMPDIR}"' EXIT
+
+if [ "${TARGET_MODE}" = "local" ]; then
+  cat > "${TMPDIR}/inventory.ini" <<EOF
+[targets]
+localhost ansible_connection=local
+EOF
+elif [ "${TARGET_MODE}" = "vm" ]; then
+  cat > "${TMPDIR}/inventory.ini" <<EOF
+[targets]
+rocm-xio-vm ansible_host=localhost ansible_port=${SSH_PORT} ansible_user=${VM_USERNAME} ansible_password=${VM_PASS} ansible_become_pass=${VM_PASS} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+EOF
+else
+  echo "ERROR: TARGET_MODE must be local or vm"
+  exit 1
+fi
+
+echo "Running fio rocm_xio Ansible role..."
+echo "  target mode: ${TARGET_MODE}"
+echo "  branch:      ${FIO_BRANCH}"
+echo ""
+
+ansible-playbook \
+  -i "${TMPDIR}/inventory.ini" \
+  "${PLAYBOOK}" \
+  -l targets \
+  -e "fio_repo_url=${FIO_REPO_URL}" \
+  -e "fio_branch=${FIO_BRANCH}" \
+  -e "fio_checkout_dir=${FIO_CHECKOUT_DIR}" \
+  -e "fio_rocm_xio_prefix=${FIO_ROCM_XIO_PATH}" \
+  -e "fio_hipcc_path=${FIO_HIPCC_PATH}" \
+  -e "fio_run_smoke=${FIO_RUN_SMOKE}" \
+  -e "fio_smoke_filename=${FIO_SMOKE_FILENAME}"

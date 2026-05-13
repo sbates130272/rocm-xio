@@ -1,0 +1,25 @@
+---
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+
+fio_repo_url: https://github.com/sbates130272/fio.git
+fio_branch: dev/batesste/rocm-xio-engine
+fio_checkout_dir: /opt/fio-rocm-xio
+fio_rocm_xio_prefix: /opt/rocs-ais
+
+# Set to /opt/rocm/bin/hipcc when installed there.
+fio_hipcc_path: hipcc
+fio_make_jobs: "{{ ansible_facts.processor_vcpus | default(4) }}"
+
+fio_run_smoke: false
+fio_smoke_job_name: rocm_xio_smoke
+fio_smoke_filename: ""
+fio_smoke_runtime: 5
+fio_smoke_gpu_id: 0
+fio_smoke_queue_length: 256
+fio_smoke_memory_mode: 0
+fio_smoke_iodepth: 64
+fio_smoke_bs: 4k
+fio_smoke_rw: randread

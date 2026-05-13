@@ -1,0 +1,118 @@
+---
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+
+- name: Install fio rocm-xio build dependencies
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - git
+      - pkg-config
+      - zlib1g-dev
+    state: present
+    update_cache: true
+
+- name: Resolve hipcc compiler path
+  ansible.builtin.shell: |
+    if [ -x "{{ fio_hipcc_path }}" ]; then
+      printf '%s\n' "{{ fio_hipcc_path }}"
+    else
+      command -v "{{ fio_hipcc_path }}"
+    fi
+  register: fio_hipcc
+  changed_when: false
+  check_mode: false
+
+- name: Fail when hipcc is unavailable
+  ansible.builtin.fail:
+    msg: >
+      hipcc was not found. Install ROCm HIP tooling and set fio_hipcc_path
+      (for example, /opt/rocm/bin/hipcc).
+  when: fio_hipcc.rc != 0
+
+- name: Ensure checkout parent directory exists
+  ansible.builtin.file:
+    path: "{{ fio_checkout_dir | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Clone fio fork branch
+  ansible.builtin.git:
+    repo: "{{ fio_repo_url }}"
+    dest: "{{ fio_checkout_dir }}"
+    version: "{{ fio_branch }}"
+    force: true
+
+- name: Build fio with rocm-xio engine enabled
+  ansible.builtin.shell: |
+    set -euo pipefail
+    ./configure --enable-rocm-xio --with-rocm-xio="{{ fio_rocm_xio_prefix }}"
+    make -j"{{ fio_make_jobs }}"
+  args:
+    chdir: "{{ fio_checkout_dir }}"
+  environment:
+    CC: gcc
+    CXX: "{{ fio_hipcc.stdout }}"
+    LD_LIBRARY_PATH: >-
+      {{ fio_rocm_xio_prefix }}/lib:/opt/rocm/lib:
+      {{ ansible_env.LD_LIBRARY_PATH | default('') }}
+  when: not ansible_check_mode
+
+- name: Verify rocm_xio engine is present
+  ansible.builtin.command: ./fio --enghelp
+  args:
+    chdir: "{{ fio_checkout_dir }}"
+  register: fio_enghelp
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Assert rocm_xio engine registration
+  ansible.builtin.assert:
+    that:
+      - "'rocm_xio' in fio_enghelp.stdout"
+    fail_msg: >
+      Built fio does not list rocm_xio in --enghelp output.
+  when: not ansible_check_mode
+
+- name: Fail when smoke test is enabled without filename
+  ansible.builtin.fail:
+    msg: fio_smoke_filename must be set when fio_run_smoke=true.
+  when:
+    - fio_run_smoke | bool
+    - fio_smoke_filename | length == 0
+
+- name: Write smoke fio jobfile
+  ansible.builtin.copy:
+    dest: /tmp/fio-rocm-xio-smoke.fio
+    mode: "0644"
+    content: |
+      [{{ fio_smoke_job_name }}]
+      ioengine=rocm_xio
+      filename={{ fio_smoke_filename }}
+      direct=1
+      thread=1
+      iodepth={{ fio_smoke_iodepth }}
+      rw={{ fio_smoke_rw }}
+      bs={{ fio_smoke_bs }}
+      rocm_xio_gpu_id={{ fio_smoke_gpu_id }}
+      rocm_xio_queue_length={{ fio_smoke_queue_length }}
+      rocm_xio_memory_mode={{ fio_smoke_memory_mode }}
+      time_based=1
+      runtime={{ fio_smoke_runtime }}
+      group_reporting=1
+  when: fio_run_smoke | bool
+
+- name: Run rocm_xio smoke fio job
+  ansible.builtin.command: ./fio /tmp/fio-rocm-xio-smoke.fio --output-format=json
+  args:
+    chdir: "{{ fio_checkout_dir }}"
+  environment:
+    LD_LIBRARY_PATH: >-
+      {{ fio_rocm_xio_prefix }}/lib:/opt/rocm/lib:
+      {{ ansible_env.LD_LIBRARY_PATH | default('') }}
+    HSA_FORCE_FINE_GRAIN_PCIE: "1"
+  when:
+    - not ansible_check_mode
+    - fio_run_smoke | bool

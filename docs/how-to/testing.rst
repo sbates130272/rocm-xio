@@ -215,6 +215,37 @@ features:
    # Quick CTest-only run
    ctest --preset sweep
 
+fio rocm_xio engine automation
+==============================
+
+The fio fork branch ``dev/batesste/rocm-xio-engine`` adds a ``rocm_xio``
+ioengine. The configure check for this engine links HIP objects and therefore
+must use ``hipcc`` as ``CXX``. If ``CXX`` stays on ``g++``, configure fails with
+unsupported flags such as ``--offload-arch=native`` and ``--hip-link``.
+
+Use the Ansible wrapper script to build and validate this branch:
+
+.. code-block:: bash
+
+   # Local host install/build only
+   scripts/test/setup-fio-rocm-xio
+
+   # VM over localhost:2222 and run smoke test
+   TARGET_MODE=vm \
+   VM_USERNAME=$USER \
+   VM_PASS=password \
+   FIO_RUN_SMOKE=true \
+   FIO_SMOKE_FILENAME=/dev/nvme2n1 \
+   scripts/test/setup-fio-rocm-xio
+
+The role is located at ``scripts/ansible/roles/fio_rocm_xio`` and:
+
+- installs fio build prerequisites
+- clones your fork branch
+- builds with ``--enable-rocm-xio`` using ``hipcc``
+- verifies ``rocm_xio`` appears in ``fio --enghelp``
+- optionally runs a short fio smoke job
+
 ``xio-tester rdma-ep``
 ======================
 
