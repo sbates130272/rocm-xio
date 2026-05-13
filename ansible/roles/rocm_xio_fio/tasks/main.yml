@@ -1,0 +1,184 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+---
+- name: Validate destructive fio smoke-test inputs
+  ansible.builtin.assert:
+    that:
+      - rocm_xio_fio_nvme_filename | length > 0
+    fail_msg: >-
+      rocm_xio_fio_nvme_filename must point at the target NVMe namespace
+      when rocm_xio_fio_run_nvme_smoke is true.
+  when: rocm_xio_fio_run_nvme_smoke | bool
+
+- name: Install fio and rocm-xio build dependencies
+  ansible.builtin.apt:
+    name: "{{ rocm_xio_fio_packages }}"
+    state: present
+    update_cache: true
+
+- name: Create user-writable fio build paths
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ rocm_xio_fio_owner }}"
+    group: "{{ rocm_xio_fio_group }}"
+    mode: "0755"
+  loop:
+    - "{{ rocm_xio_fio_src_dir | dirname }}"
+    - "{{ rocm_xio_fio_xio_build_dir }}"
+
+- name: Check rocm-xio source tree
+  ansible.builtin.stat:
+    path: "{{ rocm_xio_fio_xio_src_dir }}/CMakeLists.txt"
+  register: rocm_xio_fio_xio_source
+
+- name: Require rocm-xio source tree
+  ansible.builtin.assert:
+    that:
+      - rocm_xio_fio_xio_source.stat.exists
+    fail_msg: >-
+      rocm_xio_fio_xio_src_dir must point at a rocm-xio checkout that has
+      already been mounted or cloned into the test VM.
+
+- name: Configure rocm-xio install build
+  ansible.builtin.command:
+    argv:
+      - cmake
+      - -S
+      - "{{ rocm_xio_fio_xio_src_dir }}"
+      - -B
+      - "{{ rocm_xio_fio_xio_build_dir }}"
+      - "-DCMAKE_BUILD_TYPE={{ rocm_xio_fio_xio_cmake_build_type }}"
+      - "-DCMAKE_INSTALL_PREFIX={{ rocm_xio_fio_xio_install_prefix }}"
+  become: false
+  environment:
+    LD_LIBRARY_PATH: "{{ rocm_xio_fio_ld_library_path }}"
+    PATH: "{{ rocm_xio_fio_path }}"
+
+- name: Build rocm-xio shared library
+  ansible.builtin.command:
+    argv:
+      - cmake
+      - --build
+      - "{{ rocm_xio_fio_xio_build_dir }}"
+      - --target
+      - rocm-xio
+      - --parallel
+      - "{{ rocm_xio_fio_make_jobs | string }}"
+  become: false
+  environment:
+    LD_LIBRARY_PATH: "{{ rocm_xio_fio_ld_library_path }}"
+    PATH: "{{ rocm_xio_fio_path }}"
+
+- name: Install rocm-xio library and headers
+  ansible.builtin.command:
+    argv:
+      - cmake
+      - --install
+      - "{{ rocm_xio_fio_xio_build_dir }}"
+      - --component
+      - rocm-xio
+  environment:
+    LD_LIBRARY_PATH: "{{ rocm_xio_fio_ld_library_path }}"
+    PATH: "{{ rocm_xio_fio_path }}"
+
+- name: Register rocm-xio library path with ldconfig
+  ansible.builtin.copy:
+    dest: /etc/ld.so.conf.d/rocm-xio.conf
+    content: "{{ rocm_xio_fio_xio_install_prefix }}/lib\n"
+    owner: root
+    group: root
+    mode: "0644"
+  register: rocm_xio_fio_ldconfig_file
+
+- name: Refresh dynamic linker cache
+  ansible.builtin.command: ldconfig
+  when: rocm_xio_fio_ldconfig_file.changed
+
+- name: Clone fio rocm-xio branch
+  ansible.builtin.git:
+    repo: "{{ rocm_xio_fio_repo }}"
+    dest: "{{ rocm_xio_fio_src_dir }}"
+    version: "{{ rocm_xio_fio_version }}"
+    update: true
+    force: false
+  become: false
+
+- name: Configure fio with rocm-xio engine enabled
+  ansible.builtin.command: >-
+    ./configure --enable-rocm-xio
+    --with-rocm-xio={{ rocm_xio_fio_xio_install_prefix }}
+    --prefix={{ rocm_xio_fio_install_prefix }}
+    {{ rocm_xio_fio_configure_extra | join(' ') }}
+  args:
+    chdir: "{{ rocm_xio_fio_src_dir }}"
+  become: false
+  environment:
+    LD_LIBRARY_PATH: "{{ rocm_xio_fio_ld_library_path }}"
+    PATH: "{{ rocm_xio_fio_path }}"
+
+- name: Build fio rocm-xio engine
+  ansible.builtin.command:
+    argv:
+      - make
+      - "-j{{ rocm_xio_fio_make_jobs }}"
+  args:
+    chdir: "{{ rocm_xio_fio_src_dir }}"
+  become: false
+  environment:
+    LD_LIBRARY_PATH: "{{ rocm_xio_fio_ld_library_path }}"
+    PATH: "{{ rocm_xio_fio_path }}"
+
+- name: Install fio
+  ansible.builtin.command:
+    argv:
+      - make
+      - install
+  args:
+    chdir: "{{ rocm_xio_fio_src_dir }}"
+  environment:
+    LD_LIBRARY_PATH: "{{ rocm_xio_fio_ld_library_path }}"
+    PATH: "{{ rocm_xio_fio_path }}"
+  when: rocm_xio_fio_install | bool
+
+- name: Select fio executable
+  ansible.builtin.set_fact:
+    rocm_xio_fio_bin: >-
+      {{ (rocm_xio_fio_install | bool)
+         | ternary(rocm_xio_fio_install_prefix ~ '/bin/fio',
+                   rocm_xio_fio_src_dir ~ '/fio') }}
+
+- name: Run non-destructive rocm-xio engine smoke check
+  ansible.builtin.command:
+    argv:
+      - "{{ rocm_xio_fio_bin }}"
+      - --enghelp=rocm_xio
+  changed_when: false
+  become: false
+  environment:
+    LD_LIBRARY_PATH: "{{ rocm_xio_fio_ld_library_path }}"
+    PATH: "{{ rocm_xio_fio_path }}"
+  when: rocm_xio_fio_run_engine_smoke | bool
+
+- name: Render rocm-xio fio NVMe smoke job
+  ansible.builtin.template:
+    src: rocm-xio-smoke.fio.j2
+    dest: "{{ rocm_xio_fio_job_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: rocm_xio_fio_run_nvme_smoke | bool
+
+- name: Run rocm-xio fio NVMe smoke job
+  ansible.builtin.command:
+    argv:
+      - "{{ rocm_xio_fio_bin }}"
+      - "{{ rocm_xio_fio_job_path }}"
+  changed_when: false
+  become: "{{ rocm_xio_fio_nvme_smoke_become | bool }}"
+  environment:
+    LD_LIBRARY_PATH: "{{ rocm_xio_fio_ld_library_path }}"
+    PATH: "{{ rocm_xio_fio_path }}"
+  when: rocm_xio_fio_run_nvme_smoke | bool

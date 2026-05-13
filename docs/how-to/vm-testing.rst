@@ -95,6 +95,31 @@ tools inside the guest.
    # VM must already be running (launch-test-vm)
    cmake --build build --target setup-test-vm
 
+``setup-fio-test-vm``
+---------------------
+
+Builds and installs the ``sbates130272/fio`` ``rocm-xio`` branch inside a
+running VM, using the local ``ansible/roles/rocm_xio_fio`` role. The default
+target installs ``rocm-xio`` into ``/opt/rocs-ais``, builds fio against that
+prefix, installs fio into ``/usr/local``, and runs ``fio --enghelp=rocm_xio``.
+
+.. code-block:: bash
+
+   # VM must already be provisioned by setup-test-vm
+   cmake --build build --target setup-fio-test-vm
+
+The generated NVMe fio job is disabled by default because it can issue I/O to
+the target namespace. Enable it only after selecting the test namespace:
+
+.. code-block:: bash
+
+   FIO_RUN_NVME_SMOKE=true \
+   FIO_FILENAME=/dev/nvme0n1 \
+   FIO_CONTROLLER=/dev/nvme0 \
+   FIO_RW=read \
+   FIO_SIZE=4k \
+   cmake --build build --target setup-fio-test-vm
+
 ``launch-test-vm``
 ------------------
 

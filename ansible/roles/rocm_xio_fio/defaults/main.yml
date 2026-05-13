@@ -1,0 +1,63 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+---
+rocm_xio_fio_repo: https://github.com/sbates130272/fio.git
+rocm_xio_fio_version: dev/batesste/rocm-xio-engine
+rocm_xio_fio_owner: "{{ ansible_user | default(ansible_user_id) }}"
+rocm_xio_fio_group: "{{ rocm_xio_fio_owner }}"
+rocm_xio_fio_user_home: "/home/{{ rocm_xio_fio_owner }}"
+rocm_xio_fio_src_dir: "{{ rocm_xio_fio_user_home }}/Projects/fio-rocm-xio"
+rocm_xio_fio_install: true
+rocm_xio_fio_install_prefix: /usr/local
+rocm_xio_fio_configure_extra: []
+rocm_xio_fio_make_jobs: "{{ ansible_processor_vcpus | default(2) }}"
+
+rocm_xio_fio_xio_src_dir: "{{ rocm_xio_fio_user_home }}/Projects/rocm-xio"
+rocm_xio_fio_xio_build_dir: /opt/rocm-xio-fio-build
+rocm_xio_fio_xio_install_prefix: /opt/rocs-ais
+rocm_xio_fio_xio_cmake_build_type: RelWithDebInfo
+
+rocm_xio_fio_packages:
+  - build-essential
+  - git
+  - libaio-dev
+  - libdrm-dev
+  - libnuma-dev
+  - make
+  - pkg-config
+  - zlib1g-dev
+
+rocm_xio_fio_path: "/opt/rocm/bin:{{ ansible_env.PATH }}"
+rocm_xio_fio_ld_library_path: >-
+  {{ rocm_xio_fio_xio_install_prefix }}/lib:/opt/rocm/lib:{{
+  ansible_env.LD_LIBRARY_PATH | default('') }}
+
+rocm_xio_fio_run_engine_smoke: true
+rocm_xio_fio_run_nvme_smoke: false
+rocm_xio_fio_nvme_smoke_become: true
+rocm_xio_fio_job_path: /tmp/rocm-xio-smoke.fio
+
+rocm_xio_fio_nvme_filename: ""
+rocm_xio_fio_nvme_controller: ""
+rocm_xio_fio_nvme_nsid: 1
+rocm_xio_fio_gpu_id: -1
+rocm_xio_fio_rw: read
+rocm_xio_fio_bs: 4096
+rocm_xio_fio_size: 4k
+rocm_xio_fio_iodepth: 1
+rocm_xio_fio_direct: 1
+rocm_xio_fio_thread: 1
+rocm_xio_fio_numjobs: 1
+rocm_xio_fio_queue_id: 0
+rocm_xio_fio_queue_length: 64
+rocm_xio_fio_batch_size: 0
+rocm_xio_fio_sq_batch_size: 0
+rocm_xio_fio_cq_batch_size: 0
+rocm_xio_fio_memory_mode: 0
+rocm_xio_fio_pci_mmio_bridge: false
+rocm_xio_fio_precompute_prps: false
+rocm_xio_fio_verify_lfsr: false
+rocm_xio_fio_verbose: false
+rocm_xio_fio_profile: true

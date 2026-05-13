@@ -1,0 +1,32 @@
+; Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+;
+; SPDX-License-Identifier: MIT
+;
+[global]
+ioengine=rocm_xio
+filename={{ rocm_xio_fio_nvme_filename }}
+rw={{ rocm_xio_fio_rw }}
+bs={{ rocm_xio_fio_bs }}
+size={{ rocm_xio_fio_size }}
+iodepth={{ rocm_xio_fio_iodepth }}
+direct={{ rocm_xio_fio_direct }}
+thread={{ rocm_xio_fio_thread }}
+numjobs={{ rocm_xio_fio_numjobs }}
+rocm_xio_gpu_id={{ rocm_xio_fio_gpu_id }}
+rocm_xio_queue_id={{ rocm_xio_fio_queue_id }}
+rocm_xio_queue_length={{ rocm_xio_fio_queue_length }}
+rocm_xio_nsid={{ rocm_xio_fio_nvme_nsid }}
+rocm_xio_batch_size={{ rocm_xio_fio_batch_size }}
+rocm_xio_sq_batch_size={{ rocm_xio_fio_sq_batch_size }}
+rocm_xio_cq_batch_size={{ rocm_xio_fio_cq_batch_size }}
+rocm_xio_memory_mode={{ rocm_xio_fio_memory_mode }}
+rocm_xio_pci_mmio_bridge={{ rocm_xio_fio_pci_mmio_bridge | int }}
+rocm_xio_precompute_prps={{ rocm_xio_fio_precompute_prps | int }}
+rocm_xio_verify_lfsr={{ rocm_xio_fio_verify_lfsr | int }}
+rocm_xio_verbose={{ rocm_xio_fio_verbose | int }}
+rocm_xio_profile={{ rocm_xio_fio_profile | int }}
+{% if rocm_xio_fio_nvme_controller | length > 0 %}
+rocm_xio_controller={{ rocm_xio_fio_nvme_controller }}
+{% endif %}
+
+[rocm-xio-smoke]

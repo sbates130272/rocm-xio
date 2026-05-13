@@ -468,6 +468,8 @@ find_program(ANSIBLE_GALAXY ansible-galaxy)
 
 set(_setup_vm
   "${CMAKE_SOURCE_DIR}/scripts/test/setup-vm")
+set(_setup_fio_vm
+  "${CMAKE_SOURCE_DIR}/scripts/test/setup-fio-vm")
 
 if(ANSIBLE_PLAYBOOK AND ANSIBLE_GALAXY)
   message(STATUS
@@ -487,6 +489,19 @@ if(ANSIBLE_PLAYBOOK AND ANSIBLE_GALAXY)
     USES_TERMINAL
     VERBATIM
   )
+
+  add_custom_target(setup-fio-test-vm
+    COMMAND ${CMAKE_COMMAND} -E env
+      "ANSIBLE_PLAYBOOK=${ANSIBLE_PLAYBOOK}"
+      "SSH_PORT=2222"
+      "VM_USERNAME=${XIO_VM_USERNAME}"
+      "VM_PASS=${XIO_VM_PASS}"
+      "${_setup_fio_vm}"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Building fio rocm-xio engine in VM"
+    USES_TERMINAL
+    VERBATIM
+  )
 else()
   add_custom_target(setup-test-vm
     COMMAND ${CMAKE_COMMAND} -E echo
@@ -495,5 +510,14 @@ else()
       "  pip install ansible"
     COMMAND ${CMAKE_COMMAND} -E false
     COMMENT "setup-test-vm: Ansible not installed"
+  )
+
+  add_custom_target(setup-fio-test-vm
+    COMMAND ${CMAKE_COMMAND} -E echo
+      "Error: ansible-playbook not found."
+    COMMAND ${CMAKE_COMMAND} -E echo
+      "  pip install ansible"
+    COMMAND ${CMAKE_COMMAND} -E false
+    COMMENT "setup-fio-test-vm: Ansible not installed"
   )
 endif()

@@ -1,0 +1,136 @@
+#!/bin/bash
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# setup-fio-vm
+#
+# Build and test the sbates130272/fio rocm-xio branch inside a running
+# rocm-xio test VM. This script expects scripts/test/setup-vm to have already
+# mounted the host Projects directory and built the rocm-xio kernel module.
+#
+# Environment variables:
+#   SSH_PORT              VM SSH port (default: 2222)
+#   VM_USERNAME           VM user (default: $USER)
+#   VM_PASS               VM password (default: password)
+#   ANSIBLE_PLAYBOOK      Path to ansible-playbook
+#   FIO_REPO              fio repository URL
+#   FIO_VERSION           fio branch, tag, or commit
+#   FIO_RUN_NVME_SMOKE    run the destructive NVMe smoke job (default: false)
+#   FIO_FILENAME          NVMe namespace path for the smoke job
+#   FIO_CONTROLLER        NVMe controller path for the smoke job
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+SSH_PORT="${SSH_PORT:-2222}"
+VM_USERNAME="${VM_USERNAME:-${USER}}"
+VM_PASS="${VM_PASS:-password}"
+ANSIBLE_PLAYBOOK="${ANSIBLE_PLAYBOOK:-ansible-playbook}"
+
+FIO_REPO="${FIO_REPO:-https://github.com/sbates130272/fio.git}"
+FIO_VERSION="${FIO_VERSION:-dev/batesste/rocm-xio-engine}"
+FIO_RUN_NVME_SMOKE="${FIO_RUN_NVME_SMOKE:-false}"
+FIO_FILENAME="${FIO_FILENAME:-}"
+FIO_CONTROLLER="${FIO_CONTROLLER:-}"
+FIO_NSID="${FIO_NSID:-1}"
+FIO_RW="${FIO_RW:-read}"
+FIO_BS="${FIO_BS:-4096}"
+FIO_SIZE="${FIO_SIZE:-4k}"
+FIO_IODEPTH="${FIO_IODEPTH:-1}"
+FIO_QUEUE_ID="${FIO_QUEUE_ID:-0}"
+FIO_QUEUE_LENGTH="${FIO_QUEUE_LENGTH:-64}"
+FIO_BATCH_SIZE="${FIO_BATCH_SIZE:-0}"
+FIO_SQ_BATCH_SIZE="${FIO_SQ_BATCH_SIZE:-0}"
+FIO_CQ_BATCH_SIZE="${FIO_CQ_BATCH_SIZE:-0}"
+FIO_MEMORY_MODE="${FIO_MEMORY_MODE:-0}"
+FIO_GPU_ID="${FIO_GPU_ID:--1}"
+FIO_PCI_MMIO_BRIDGE="${FIO_PCI_MMIO_BRIDGE:-false}"
+FIO_PRECOMPUTE_PRPS="${FIO_PRECOMPUTE_PRPS:-false}"
+FIO_VERIFY_LFSR="${FIO_VERIFY_LFSR:-false}"
+
+yaml_quote() {
+  python3 -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$1"
+}
+
+FIO_REPO_YAML="$(yaml_quote "${FIO_REPO}")"
+FIO_VERSION_YAML="$(yaml_quote "${FIO_VERSION}")"
+FIO_FILENAME_YAML="$(yaml_quote "${FIO_FILENAME}")"
+FIO_CONTROLLER_YAML="$(yaml_quote "${FIO_CONTROLLER}")"
+FIO_RW_YAML="$(yaml_quote "${FIO_RW}")"
+FIO_BS_YAML="$(yaml_quote "${FIO_BS}")"
+FIO_SIZE_YAML="$(yaml_quote "${FIO_SIZE}")"
+
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "${TMPDIR}"' EXIT
+
+SSH_ARGS="-o StrictHostKeyChecking=no"
+SSH_ARGS="${SSH_ARGS} -o UserKnownHostsFile=/dev/null"
+
+HOST_LINE="rocm-xio-vm"
+HOST_LINE="${HOST_LINE} ansible_host=localhost"
+HOST_LINE="${HOST_LINE} ansible_port=${SSH_PORT}"
+HOST_LINE="${HOST_LINE} ansible_user=${VM_USERNAME}"
+HOST_LINE="${HOST_LINE} ansible_password=${VM_PASS}"
+HOST_LINE="${HOST_LINE} ansible_become_pass=${VM_PASS}"
+HOST_LINE="${HOST_LINE} ansible_ssh_common_args='${SSH_ARGS}'"
+
+cat > "${TMPDIR}/inventory.ini" <<EOF
+[testvm]
+${HOST_LINE}
+EOF
+
+PROJECTS="/home/${VM_USERNAME}/Projects"
+XIO="${PROJECTS}/rocm-xio"
+XIO_YAML="$(yaml_quote "${XIO}")"
+
+cat > "${TMPDIR}/setup-fio.yml" <<EOF
+---
+- name: Build and test fio rocm-xio engine
+  hosts: testvm
+  become: true
+  gather_facts: true
+  roles:
+    - role: rocm_xio_fio
+      rocm_xio_fio_repo: ${FIO_REPO_YAML}
+      rocm_xio_fio_version: ${FIO_VERSION_YAML}
+      rocm_xio_fio_xio_src_dir: ${XIO_YAML}
+      rocm_xio_fio_run_nvme_smoke: ${FIO_RUN_NVME_SMOKE}
+      rocm_xio_fio_nvme_filename: ${FIO_FILENAME_YAML}
+      rocm_xio_fio_nvme_controller: ${FIO_CONTROLLER_YAML}
+      rocm_xio_fio_nvme_nsid: ${FIO_NSID}
+      rocm_xio_fio_rw: ${FIO_RW_YAML}
+      rocm_xio_fio_bs: ${FIO_BS_YAML}
+      rocm_xio_fio_size: ${FIO_SIZE_YAML}
+      rocm_xio_fio_iodepth: ${FIO_IODEPTH}
+      rocm_xio_fio_queue_id: ${FIO_QUEUE_ID}
+      rocm_xio_fio_queue_length: ${FIO_QUEUE_LENGTH}
+      rocm_xio_fio_batch_size: ${FIO_BATCH_SIZE}
+      rocm_xio_fio_sq_batch_size: ${FIO_SQ_BATCH_SIZE}
+      rocm_xio_fio_cq_batch_size: ${FIO_CQ_BATCH_SIZE}
+      rocm_xio_fio_memory_mode: ${FIO_MEMORY_MODE}
+      rocm_xio_fio_gpu_id: ${FIO_GPU_ID}
+      rocm_xio_fio_pci_mmio_bridge: ${FIO_PCI_MMIO_BRIDGE}
+      rocm_xio_fio_precompute_prps: ${FIO_PRECOMPUTE_PRPS}
+      rocm_xio_fio_verify_lfsr: ${FIO_VERIFY_LFSR}
+EOF
+
+echo "Running fio rocm-xio Ansible playbook against VM..."
+echo "  SSH port: ${SSH_PORT}"
+echo "  User:     ${VM_USERNAME}"
+echo "  fio ref:  ${FIO_VERSION}"
+echo ""
+
+ROLE_PATH="${REPO_ROOT}/ansible/roles"
+if [ -n "${ANSIBLE_ROLES_PATH:-}" ]; then
+  export ANSIBLE_ROLES_PATH="${ROLE_PATH}:${ANSIBLE_ROLES_PATH}"
+else
+  export ANSIBLE_ROLES_PATH="${ROLE_PATH}"
+fi
+
+"${ANSIBLE_PLAYBOOK}" \
+  -i "${TMPDIR}/inventory.ini" \
+  "${TMPDIR}/setup-fio.yml" \
+  -v
