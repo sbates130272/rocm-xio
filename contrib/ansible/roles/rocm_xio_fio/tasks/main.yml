@@ -1,0 +1,133 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+---
+- name: Restrict role to Debian family hosts
+  ansible.builtin.assert:
+    that: ansible_os_family == "Debian"
+    fail_msg: This role is written for Ubuntu/Debian (apt, paths under /opt/rocm).
+
+- name: Install build dependencies and ROCm HIP SDK packages
+  ansible.builtin.apt:
+    name: "{{ rocm_xio_fio_build_packages + ['rocm-hip-sdk', 'rocminfo'] }}"
+    state: present
+    update_cache: true
+  become: true
+
+- name: Ensure install prefix parent exists
+  ansible.builtin.file:
+    path: "{{ rocm_xio_install_prefix }}"
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Ensure build directory exists
+  ansible.builtin.file:
+    path: "{{ rocm_xio_build_dir }}"
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Clone or update rocm-xio
+  ansible.builtin.git:
+    repo: "{{ rocm_xio_git_repo }}"
+    dest: "{{ rocm_xio_build_dir }}/rocm-xio"
+    version: "{{ rocm_xio_git_ref }}"
+    force: true
+  become: true
+
+- name: Optional CMake offload-arch argument
+  ansible.builtin.set_fact:
+    _rocm_xio_offload_cmake_arg: "{{ ['-DOFFLOAD_ARCH=' ~ rocm_xio_offload_arch] if rocm_xio_offload_arch | length > 0 else [] }}"
+
+- name: Build argv for rocm-xio CMake configure
+  ansible.builtin.set_fact:
+    rocm_xio_cmake_argv: "{{ ['cmake', '-S', rocm_xio_build_dir ~ '/rocm-xio', '-B', rocm_xio_build_dir ~ '/rocm-xio/build', '-DCMAKE_BUILD_TYPE=' ~ rocm_xio_cmake_build_type, '-DCMAKE_INSTALL_PREFIX=' ~ rocm_xio_install_prefix, '-DBUILD_CLIENTS=OFF', '-DROCM_PATH=' ~ rocm_path] + _rocm_xio_offload_cmake_arg + rocm_xio_cmake_extra_args }}"
+
+- name: Configure rocm-xio with CMake
+  ansible.builtin.command:
+    argv: "{{ rocm_xio_cmake_argv }}"
+    creates: "{{ rocm_xio_build_dir }}/rocm-xio/build/CMakeCache.txt"
+  environment:
+    PATH: "{{ rocm_path }}/bin:{{ ansible_env.PATH }}"
+  become: true
+
+- name: Build rocm-xio
+  ansible.builtin.shell: |
+    set -euo pipefail
+    export PATH="{{ rocm_path }}/bin:${PATH}"
+    cmake --build "{{ rocm_xio_build_dir }}/rocm-xio/build" --target all -j"$(nproc)"
+  args:
+    executable: /bin/bash
+  become: true
+
+- name: Install rocm-xio into prefix
+  ansible.builtin.command:
+    argv:
+      - cmake
+      - --install
+      - "{{ rocm_xio_build_dir }}/rocm-xio/build"
+      - --prefix
+      - "{{ rocm_xio_install_prefix }}"
+  become: true
+
+- name: Clone or update fio
+  ansible.builtin.git:
+    repo: "{{ fio_git_repo }}"
+    dest: "{{ rocm_xio_build_dir }}/fio"
+    version: "{{ fio_git_ref }}"
+    force: true
+  become: true
+
+- name: Run fio configure with rocm-xio engine
+  ansible.builtin.shell: |
+    set -euo pipefail
+    export PATH="{{ rocm_path }}/bin:${PATH}"
+    cd "{{ rocm_xio_build_dir }}/fio"
+    if [ -f ./config-host.mak ]; then make distclean || true; fi
+    ./configure --enable-rocm-xio --with-rocm-xio="{{ rocm_xio_install_prefix }}" {{ fio_configure_extra_args }}
+  args:
+    executable: /bin/bash
+  environment:
+    PATH: "{{ rocm_path }}/bin:{{ ansible_env.PATH }}"
+  become: true
+
+- name: Build fio
+  ansible.builtin.shell: |
+    set -euo pipefail
+    export PATH="{{ rocm_path }}/bin:${PATH}"
+    make -j"$(nproc)"
+  args:
+    chdir: "{{ rocm_xio_build_dir }}/fio"
+    executable: /bin/bash
+  become: true
+
+- name: Verify rocm_xio engine is registered
+  ansible.builtin.shell: |
+    set -euo pipefail
+    export PATH="{{ rocm_path }}/bin:${PATH}"
+    cd "{{ rocm_xio_build_dir }}/fio"
+    ./fio --enghelp | grep -q rocm_xio
+  args:
+    executable: /bin/bash
+  environment:
+    PATH: "{{ rocm_path }}/bin:{{ ansible_env.PATH }}"
+  changed_when: false
+  become: true
+
+- name: Run optional fio smoke job (requires fio_smoke_test_filename)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    export PATH="{{ rocm_path }}/bin:${PATH}"
+    export HSA_FORCE_FINE_GRAIN_PCIE=1
+    cd "{{ rocm_xio_build_dir }}/fio"
+    ./fio --name=smoke --ioengine=rocm_xio --thread=1 --rw=read --size=1m \
+      --filename="{{ fio_smoke_test_filename }}" --time_based=0 --iodepth=1 \
+      --numjobs=1 --group_reporting=1
+  args:
+    executable: /bin/bash
+  when: fio_smoke_test_enable | bool and (fio_smoke_test_filename | length > 0)
+  environment:
+    PATH: "{{ rocm_path }}/bin:{{ ansible_env.PATH }}"
+  become: true

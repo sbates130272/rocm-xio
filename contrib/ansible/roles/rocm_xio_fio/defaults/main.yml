@@ -1,0 +1,46 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+---
+# Install prefix for rocm-xio (headers + libs). Fio links with
+# --with-rocm-xio=<this path>.
+rocm_xio_install_prefix: /opt/rocm-xio-fio
+
+# Source tree locations (created by the role).
+rocm_xio_build_dir: /usr/local/src/rocm-xio-fio-build
+rocm_xio_git_repo: https://github.com/sbates130272/rocm-xio.git
+rocm_xio_git_ref: dev/stebates/nvme-ep-fio-api
+
+# Upstream fio fork branch with the rocm_xio engine. There is no branch named
+# rocm-xio on that fork; dev/batesste/rocm-xio-engine tracks the integration.
+fio_git_repo: https://github.com/sbates130272/fio.git
+fio_git_ref: dev/batesste/rocm-xio-engine
+
+# ROCm layout (Ubuntu packages install here).
+rocm_path: /opt/rocm
+
+# CMake: disable xio-tester to avoid libcli11-dev on minimal hosts.
+rocm_xio_cmake_build_type: Release
+# Extra CMake arguments as a list, e.g. ["-GNinja"].
+rocm_xio_cmake_extra_args: []
+
+# When set (e.g. gfx942), passed to CMake as -DOFFLOAD_ARCH=... . Leave empty
+# for hipcc auto-detect on the build host.
+rocm_xio_offload_arch: ""
+
+# Extra ./configure flags for fio (e.g. --disable-werror).
+fio_configure_extra_args: ""
+
+# If true, run a short fio job against this block device (destructive if rw).
+fio_smoke_test_enable: false
+fio_smoke_test_filename: ""
+
+# Package names for Ubuntu/Debian (override for other suites).
+rocm_xio_fio_build_packages:
+  - build-essential
+  - cmake
+  - git
+  - pkg-config
+  - libdrm-dev
+  - libnuma-dev
