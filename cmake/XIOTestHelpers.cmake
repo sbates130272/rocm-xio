@@ -22,6 +22,8 @@ set(XIO_TEST_COMMON_DIR ${CMAKE_SOURCE_DIR}/tests/unit/common)
 #     TIMEOUT 30
 #     INCLUDE_DIRS dir1 dir2
 #     EXTRA_ARGS --provider bnxt
+#     COMPILE_DEFINITIONS FOO=1
+#     ENVIRONMENT "BAR=baz"
 #   )
 #
 # NAME       - Test target and CTest name.
@@ -29,15 +31,18 @@ set(XIO_TEST_COMMON_DIR ${CMAKE_SOURCE_DIR}/tests/unit/common)
 # LABELS     - CTest labels for filtering (unit, system, hardware, stress,
 #              rdma).
 # TIMEOUT    - CTest timeout in seconds (defaults based on label category).
-# INCLUDE_DIRS - Extra include directories.
-# EXTRA_ARGS - Extra arguments passed to the test command.
-# GPU        - If set, adds RESOURCE_GROUPS for GPU.
+# INCLUDE_DIRS          - Extra include directories.
+# EXTRA_ARGS            - Extra arguments passed to the test command.
+# COMPILE_DEFINITIONS   - Optional compile definitions for the test target.
+# ENVIRONMENT           - Optional CTest ENVIRONMENT entries (merged with
+#                         GPU rdma-core LD_LIBRARY_PATH when applicable).
+# GPU                   - If set, adds RESOURCE_GROUPS for GPU.
 function(xio_add_test)
   cmake_parse_arguments(
     XIO_TEST
     "GPU"
     "NAME;SOURCE;TIMEOUT"
-    "LABELS;EXTRA_ARGS;INCLUDE_DIRS"
+    "LABELS;EXTRA_ARGS;INCLUDE_DIRS;ENVIRONMENT;COMPILE_DEFINITIONS"
     ${ARGN}
   )
 
@@ -91,6 +96,11 @@ function(xio_add_test)
     endif()
   endforeach()
 
+  if(XIO_TEST_COMPILE_DEFINITIONS)
+    target_compile_definitions(${XIO_TEST_NAME}
+      PRIVATE ${XIO_TEST_COMPILE_DEFINITIONS})
+  endif()
+
   # Register test with CTest
   if(XIO_TEST_EXTRA_ARGS)
     add_test(
@@ -140,14 +150,23 @@ function(xio_add_test)
         SKIP_REGULAR_EXPRESSION "SKIP:")
   endif()
 
-  # rdma-core library path for hardware tests
+  # rdma-core library path for hardware tests, merged with optional
+  # ENVIRONMENT from the caller (CTest replaces ENVIRONMENT on repeat
+  # set_tests_properties calls).
   set(_rdma_lib
     "${CMAKE_BINARY_DIR}/_deps/rdma-core/install/lib")
+  set(_xio_test_env "")
   if(XIO_TEST_GPU AND
      (GDA_BNXT OR GDA_IONIC OR GDA_ERNIC))
-    set_tests_properties(${XIO_TEST_NAME}
-      PROPERTIES ENVIRONMENT
+    list(APPEND _xio_test_env
       "LD_LIBRARY_PATH=${_rdma_lib}:$ENV{LD_LIBRARY_PATH}")
+  endif()
+  if(XIO_TEST_ENVIRONMENT)
+    list(APPEND _xio_test_env ${XIO_TEST_ENVIRONMENT})
+  endif()
+  if(_xio_test_env)
+    set_tests_properties(${XIO_TEST_NAME}
+      PROPERTIES ENVIRONMENT "${_xio_test_env}")
   endif()
 endfunction()
 

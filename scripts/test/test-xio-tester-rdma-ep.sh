@@ -12,6 +12,7 @@
 #     ./test-xio-tester-rdma-ep.sh
 #   ITERATIONS=0 ./test-xio-tester-rdma-ep.sh
 #   VERIFY=false ./test-xio-tester-rdma-ep.sh
+#   MEMORY_MODE=8 ./test-xio-tester-rdma-ep.sh
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -21,6 +22,7 @@ ITERATIONS=${ITERATIONS:-128}
 BATCH_SIZE=${BATCH_SIZE:-1}
 NUM_QUEUES=${NUM_QUEUES:-1}
 TRANSFER_SIZE=${TRANSFER_SIZE:-4096}
+MEMORY_MODE=${MEMORY_MODE:-0}
 VERIFY=${VERIFY:-true}
 
 # Derive vendor from ROCXIO_RDMA_DEVICE when VENDOR
@@ -91,6 +93,7 @@ HSA_FORCE_FINE_GRAIN_PCIE=1 \
   --provider "${VENDOR}" \
   --device "${RDMA_DEVICE}" \
   --loopback \
+  --memory-mode "${MEMORY_MODE}" \
   --iterations "${ITERATIONS}" \
   --batch-size "${BATCH_SIZE}" \
   --num-queues "${NUM_QUEUES}" \

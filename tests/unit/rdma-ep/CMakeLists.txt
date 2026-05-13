@@ -96,6 +96,28 @@ if(GDA_BNXT OR GDA_MLX5 OR GDA_IONIC)
         SKIP_RETURN_CODE 77
         FIXTURES_REQUIRED RDMA_HW)
   endforeach()
+
+  # Extra transfer sizes (fixed seed) for coverage beyond the seed sweep.
+  set(_rdma_core_lib "${CMAKE_BINARY_DIR}/_deps/rdma-core/install/lib")
+  foreach(_tsize 512 2048 16384 65536)
+    add_test(
+      NAME test-rdma-loopback-size${_tsize}
+      COMMAND test-rdma-loopback --size ${_tsize} --seed 43669)
+    set_tests_properties(
+      test-rdma-loopback-size${_tsize}
+      PROPERTIES
+        LABELS "hardware;rdma;matrix"
+        TIMEOUT 300
+        RESOURCE_GROUPS "gpus:1"
+        SKIP_RETURN_CODE 77
+        SKIP_REGULAR_EXPRESSION "SKIP:"
+        FIXTURES_REQUIRED RDMA_HW)
+    if(GDA_BNXT OR GDA_IONIC OR GDA_ERNIC)
+      set_tests_properties(test-rdma-loopback-size${_tsize}
+        PROPERTIES ENVIRONMENT
+        "LD_LIBRARY_PATH=${_rdma_core_lib}:$ENV{LD_LIBRARY_PATH}")
+    endif()
+  endforeach()
 endif()
 
 if(GDA_BNXT OR GDA_MLX5 OR GDA_IONIC OR GDA_ERNIC)

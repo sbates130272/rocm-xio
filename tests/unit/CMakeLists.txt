@@ -6,6 +6,8 @@
 # contain CPU-only tests labelled "unit".
 
 add_subdirectory(common)
+add_subdirectory(scripts)
 add_subdirectory(test-ep)
 add_subdirectory(rdma-ep)
 add_subdirectory(nvme-ep)
+add_subdirectory(sdma-ep)

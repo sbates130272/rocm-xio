@@ -405,14 +405,34 @@ xio_add_script_test(
 )
 
 xio_add_script_test(
-  NAME nvme-ep-batch-16-queues-4
-  SCRIPT ${_verify_wrapper}
+  NAME nvme-smoke-access-sequential
+  SCRIPT ${_smoke_wrapper}
   LABELS hardware nvme smoke
-  TIMEOUT 120
-  ARGS ${_nvme_tester_script}
-  ENVIRONMENT
-    "BATCH_SIZE=16"
-    "NUM_QUEUES=4"
-    "READ_IO=128"
-    "BUILD_DIR=${CMAKE_BINARY_DIR}"
+  TIMEOUT 30
+  ARGS --access-pattern sequential --lbas-per-io 1
+    --lfsr-seed 101 --read-io 32
+    --queue-length 64 --batch-size 2
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
+)
+
+xio_add_script_test(
+  NAME nvme-smoke-queue-depth-64
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme smoke
+  TIMEOUT 45
+  ARGS --access-pattern random --lbas-per-io 1
+    --lfsr-seed 202 --read-io 96
+    --queue-length 64 --batch-size 4 -m 0
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
+)
+
+xio_add_script_test(
+  NAME nvme-smoke-device-mem-short
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme smoke
+  TIMEOUT 45
+  ARGS --access-pattern random --lbas-per-io 1
+    --lfsr-seed 303 --read-io 24
+    --queue-length 32 --batch-size 2 -m 8 --less-timing
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
 )
