@@ -91,6 +91,17 @@ public:
     return &config_;
   }
 
+  __host__ std::string validateConfig(void* endpointConfig) override {
+    if (endpointConfig == nullptr) {
+      return std::string();
+    }
+    auto* cfg = static_cast<test_ep::TestEpConfig*>(endpointConfig);
+    if (cfg->doorbell > 0 && cfg->verify) {
+      return "test-ep: --verify is not supported with --doorbell";
+    }
+    return std::string();
+  }
+
   __host__ unsigned getIterations(void* endpointConfig) const override {
     if (endpointConfig) {
       auto* cfg = static_cast<test_ep::TestEpConfig*>(endpointConfig);

@@ -60,6 +60,8 @@ int test_config_defaults() {
   ASSERT_EQ(cfg.doorbell, 0u);
   ASSERT_TRUE(!cfg.emulate);
   ASSERT_EQ(cfg.iterations, 128u);
+  ASSERT_TRUE(!cfg.verify);
+  ASSERT_EQ(cfg.seed, 1u);
   return 0;
 }
 

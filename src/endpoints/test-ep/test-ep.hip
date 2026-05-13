@@ -597,7 +597,8 @@ static void endpoint_kernel_cpu_emulate(
   unsigned long long int* endTimes, XioTimingStats* timingStats,
   unsigned iterations, unsigned numThreads, long long delayNs,
   unsigned doorbell, uint32_t* doorbellAddr, unsigned queueSize,
-  unsigned threadId) {
+  unsigned threadId, bool doVerify, uint32_t baseSeed,
+  std::atomic<uint32_t>* verifyPass, std::atomic<uint32_t>* verifyFail) {
   // Use per-thread buffers if multi-threaded (non-doorbell mode)
   bool doorbellMode = (doorbell > 0);
   sqeType* mySqe = (numThreads > 1 && !doorbellMode) ? &sqePtr[threadId]
@@ -791,9 +792,19 @@ static void endpoint_kernel_cpu_emulate(
       }
       msg.data[0] = actualDelayNs;
 
-      // Fill remaining data payload
-      for (int j = 1; j < 5; ++j) {
-        msg.data[j] = 0x123456789ABCDEF0ULL + threadId + i + j;
+      if (doVerify) {
+        uint32_t iterSeed = baseSeed + i;
+        xio::DataPatternParams fp{reinterpret_cast<uint8_t*>(&msg.data[1]),
+                                  4 * sizeof(uint64_t),
+                                  0,
+                                  static_cast<uint32_t>(4 * sizeof(uint64_t)),
+                                  iterSeed,
+                                  nullptr};
+        xio::dataPattern(false, fp);
+      } else {
+        for (int j = 1; j < 5; ++j) {
+          msg.data[j] = 0x123456789ABCDEF0ULL + threadId + i + j;
+        }
       }
 
       // Write message to memory
@@ -826,6 +837,25 @@ static void endpoint_kernel_cpu_emulate(
         unsigned long long int duration = endTime - startTime;
         updateTimingStats(timingStats, duration);
       }
+
+      if (doVerify) {
+        uint32_t iterSeed = baseSeed + i;
+        xio::DataPatternParams vp{reinterpret_cast<uint8_t*>(&mySqe->data[1]),
+                                  4 * sizeof(uint64_t),
+                                  0,
+                                  static_cast<uint32_t>(4 * sizeof(uint64_t)),
+                                  iterSeed,
+                                  nullptr};
+        if (xio::dataPattern(true, vp)) {
+          if (verifyPass) {
+            verifyPass->fetch_add(1, std::memory_order_relaxed);
+          }
+        } else {
+          if (verifyFail) {
+            verifyFail->fetch_add(1, std::memory_order_relaxed);
+          }
+        }
+      }
     }
   }
 }
@@ -838,6 +868,17 @@ hipError_t run(XioEndpointConfig* config) {
     config->endpointConfig);
   unsigned doorbell = (testEpConfig != nullptr) ? testEpConfig->doorbell : 0;
   bool emulate = (testEpConfig != nullptr) ? testEpConfig->emulate : false;
+  bool doVerify = (testEpConfig != nullptr) ? testEpConfig->verify : false;
+  uint32_t verifySeed = (testEpConfig != nullptr) ? testEpConfig->seed : 1;
+
+  config->verifyPass = 0;
+  config->verifyFail = 0;
+
+  if (doVerify && doorbell > 0) {
+    std::cerr << "Error: test-ep verify mode is not supported with doorbell"
+              << std::endl;
+    return hipErrorInvalidValue;
+  }
 
   // Cast void* to endpoint-specific types
   sqeType* sqePtr = static_cast<sqeType*>(config->submissionQueue);
@@ -907,6 +948,8 @@ hipError_t run(XioEndpointConfig* config) {
   if (emulate) {
     // Emulation mode: run kernel logic on CPU threads instead of GPU
     std::vector<std::thread> gpuEmulationThreads;
+    std::atomic<uint32_t> verifyPassCounter{0};
+    std::atomic<uint32_t> verifyFailCounter{0};
 
     // Launch CPU threads to emulate GPU kernel
     for (unsigned t = 0; t < config->numThreads; ++t) {
@@ -915,18 +958,21 @@ hipError_t run(XioEndpointConfig* config) {
                                        config->endTimes, config->timingStats,
                                        config->iterations, config->numThreads,
                                        config->delayNs, doorbell, doorbellPtr,
-                                       queueSize, t);
+                                       queueSize, t, doVerify, verifySeed,
+                                       &verifyPassCounter, &verifyFailCounter);
     }
 
     // Wait for all emulation threads to complete
     for (auto& thread : gpuEmulationThreads) {
       thread.join();
     }
+    config->verifyPass = verifyPassCounter.load(std::memory_order_relaxed);
+    config->verifyFail = verifyFailCounter.load(std::memory_order_relaxed);
   } else {
     uint32_t* doorbellPtr = static_cast<uint32_t*>(doorbellAddr);
     uint32_t* d_vPass = nullptr;
     uint32_t* d_vFail = nullptr;
-    if (testEpConfig->verify) {
+    if (doVerify) {
       (void)hipHostMalloc(&d_vPass, sizeof(uint32_t), hipHostMallocMapped);
       (void)hipHostMalloc(&d_vFail, sizeof(uint32_t), hipHostMallocMapped);
       if (d_vPass)
@@ -940,8 +986,7 @@ hipError_t run(XioEndpointConfig* config) {
                        config->timingStats, config->iterations,
                        config->numThreads, config->delayNs, doorbell,
                        doorbellPtr, queueSize, config->stopRequested,
-                       testEpConfig->verify, testEpConfig->seed, d_vPass,
-                       d_vFail);
+                       doVerify, verifySeed, d_vPass, d_vFail);
 
     err = hipGetLastError();
     if (err != hipSuccess) {
@@ -965,7 +1010,7 @@ hipError_t run(XioEndpointConfig* config) {
       return err;
     }
 
-    if (testEpConfig->verify && d_vPass && d_vFail) {
+    if (doVerify && d_vPass && d_vFail) {
       config->verifyPass = *d_vPass;
       config->verifyFail = *d_vFail;
     }
