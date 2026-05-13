@@ -105,6 +105,8 @@ These run in CI without hardware:
 - ``test-extract-endpoint`` -- CLI argument parser:
   ``extractEndpointName()``
 - ``test-ep-config`` -- test-ep configuration defaults
+- ``test-ep-cli-emulate*`` -- ``xio-tester test-ep --emulate`` CLI
+  smoke tests for single-thread, multi-thread, doorbell, and verify modes
 
 System tests
 ------------

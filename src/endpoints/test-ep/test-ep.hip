@@ -121,6 +121,12 @@ __host__ cqeType cqeGenFromSqe(const sqeType* sqeData) {
   return result;
 }
 
+static void addVerifyResult(uint32_t* counter) {
+  if (counter != nullptr) {
+    __atomic_add_fetch(counter, 1u, __ATOMIC_RELAXED);
+  }
+}
+
 // CPU thread function for doorbell mode
 // Polls doorbell address and processes SQEs from the submission queue
 static void cpuThreadDoorbell(volatile sqeType* sqeQueue,
@@ -424,9 +430,18 @@ __global__ void endpoint_kernel(
       }
       msg.data[0] = actualDelayNs;
 
-      // Fill remaining data payload
-      for (int j = 1; j < 5; ++j) {
-        msg.data[j] = 0x123456789ABCDEF0ULL + tid + i + j;
+      if (doVerify) {
+        uint32_t iterSeed = baseSeed + i;
+        xio::DataPatternParams fp{reinterpret_cast<uint8_t*>(&msg.data[1]),
+                                  4 * sizeof(uint64_t),
+                                  0,
+                                  static_cast<uint32_t>(4 * sizeof(uint64_t)),
+                                  iterSeed,
+                                  nullptr};
+        xio::dataPattern(false, fp);
+      } else {
+        for (int j = 1; j < 5; ++j)
+          msg.data[j] = 0x123456789ABCDEF0ULL + tid + i + j;
       }
 
       // Get next sequence number atomically (shared across all threads)
@@ -486,6 +501,24 @@ __global__ void endpoint_kernel(
       }
       lastResponse = currentResponse;
       lastCpuTime = currentResponse.cpuTime;
+
+      if (doVerify) {
+        uint32_t iterSeed = baseSeed + i;
+        xio::DataPatternParams vp{
+          reinterpret_cast<uint8_t*>(&sqePtr[sqeIndex].data[1]),
+          4 * sizeof(uint64_t),
+          0,
+          static_cast<uint32_t>(4 * sizeof(uint64_t)),
+          iterSeed,
+          nullptr};
+        if (xio::dataPattern(true, vp)) {
+          if (verifyPass)
+            atomicAdd(verifyPass, 1u);
+        } else {
+          if (verifyFail)
+            atomicAdd(verifyFail, 1u);
+        }
+      }
     }
   } else {
     // Normal polling mode
@@ -597,7 +630,8 @@ static void endpoint_kernel_cpu_emulate(
   unsigned long long int* endTimes, XioTimingStats* timingStats,
   unsigned iterations, unsigned numThreads, long long delayNs,
   unsigned doorbell, uint32_t* doorbellAddr, unsigned queueSize,
-  unsigned threadId) {
+  unsigned threadId, bool doVerify, uint32_t baseSeed, uint32_t* verifyPass,
+  uint32_t* verifyFail) {
   // Use per-thread buffers if multi-threaded (non-doorbell mode)
   bool doorbellMode = (doorbell > 0);
   sqeType* mySqe = (numThreads > 1 && !doorbellMode) ? &sqePtr[threadId]
@@ -666,9 +700,19 @@ static void endpoint_kernel_cpu_emulate(
       }
       msg.data[0] = actualDelayNs;
 
-      // Fill remaining data payload
-      for (int j = 1; j < 5; ++j) {
-        msg.data[j] = 0x123456789ABCDEF0ULL + threadId + i + j;
+      if (doVerify) {
+        uint32_t iterSeed = baseSeed + i;
+        xio::DataPatternParams fp{reinterpret_cast<uint8_t*>(&msg.data[1]),
+                                  4 * sizeof(uint64_t),
+                                  0,
+                                  static_cast<uint32_t>(4 * sizeof(uint64_t)),
+                                  iterSeed,
+                                  nullptr};
+        xio::dataPattern(false, fp);
+      } else {
+        for (int j = 1; j < 5; ++j) {
+          msg.data[j] = 0x123456789ABCDEF0ULL + threadId + i + j;
+        }
       }
 
       // Get next sequence number atomically
@@ -760,6 +804,22 @@ static void endpoint_kernel_cpu_emulate(
       }
       lastResponse = currentResponse;
       lastCpuTime = currentResponse.cpuTime;
+
+      if (doVerify) {
+        uint32_t iterSeed = baseSeed + i;
+        xio::DataPatternParams vp{
+          reinterpret_cast<uint8_t*>(&sqePtr[sqeIndex].data[1]),
+          4 * sizeof(uint64_t),
+          0,
+          static_cast<uint32_t>(4 * sizeof(uint64_t)),
+          iterSeed,
+          nullptr};
+        if (xio::dataPattern(true, vp)) {
+          addVerifyResult(verifyPass);
+        } else {
+          addVerifyResult(verifyFail);
+        }
+      }
     }
   } else {
     // Normal polling mode
@@ -791,9 +851,19 @@ static void endpoint_kernel_cpu_emulate(
       }
       msg.data[0] = actualDelayNs;
 
-      // Fill remaining data payload
-      for (int j = 1; j < 5; ++j) {
-        msg.data[j] = 0x123456789ABCDEF0ULL + threadId + i + j;
+      if (doVerify) {
+        uint32_t iterSeed = baseSeed + i;
+        xio::DataPatternParams fp{reinterpret_cast<uint8_t*>(&msg.data[1]),
+                                  4 * sizeof(uint64_t),
+                                  0,
+                                  static_cast<uint32_t>(4 * sizeof(uint64_t)),
+                                  iterSeed,
+                                  nullptr};
+        xio::dataPattern(false, fp);
+      } else {
+        for (int j = 1; j < 5; ++j) {
+          msg.data[j] = 0x123456789ABCDEF0ULL + threadId + i + j;
+        }
       }
 
       // Write message to memory
@@ -826,6 +896,21 @@ static void endpoint_kernel_cpu_emulate(
         unsigned long long int duration = endTime - startTime;
         updateTimingStats(timingStats, duration);
       }
+
+      if (doVerify) {
+        uint32_t iterSeed = baseSeed + i;
+        xio::DataPatternParams vp{reinterpret_cast<uint8_t*>(&mySqe->data[1]),
+                                  4 * sizeof(uint64_t),
+                                  0,
+                                  static_cast<uint32_t>(4 * sizeof(uint64_t)),
+                                  iterSeed,
+                                  nullptr};
+        if (xio::dataPattern(true, vp)) {
+          addVerifyResult(verifyPass);
+        } else {
+          addVerifyResult(verifyFail);
+        }
+      }
     }
   }
 }
@@ -834,10 +919,14 @@ hipError_t run(XioEndpointConfig* config) {
   std::vector<std::thread> cpuThreadHandles;
 
   // Get test-ep specific config
+  TestEpConfig defaultEpConfig;
   TestEpConfig* testEpConfig = static_cast<TestEpConfig*>(
     config->endpointConfig);
-  unsigned doorbell = (testEpConfig != nullptr) ? testEpConfig->doorbell : 0;
-  bool emulate = (testEpConfig != nullptr) ? testEpConfig->emulate : false;
+  if (testEpConfig == nullptr) {
+    testEpConfig = &defaultEpConfig;
+  }
+  unsigned doorbell = testEpConfig->doorbell;
+  bool emulate = testEpConfig->emulate;
 
   // Cast void* to endpoint-specific types
   sqeType* sqePtr = static_cast<sqeType*>(config->submissionQueue);
@@ -883,6 +972,42 @@ hipError_t run(XioEndpointConfig* config) {
     std::atomic_thread_fence(std::memory_order_seq_cst);
   }
 
+  hipError_t err = hipSuccess;
+  uint32_t* verifyPass = nullptr;
+  uint32_t* verifyFail = nullptr;
+
+  if (testEpConfig->verify) {
+    err = hipHostMalloc(&verifyPass, sizeof(uint32_t), hipHostMallocMapped);
+    if (err != hipSuccess) {
+      if (doorbellAddr != nullptr) {
+        bool doorbellOnDevice = (config->memoryMode & 0x4) != 0;
+        if (doorbellOnDevice) {
+          hsa_memory_free(doorbellAddr);
+        } else {
+          xio::freeHostMemory(doorbellAddr, XIO_HOST_MEM_MAPPED);
+        }
+      }
+      return err;
+    }
+
+    err = hipHostMalloc(&verifyFail, sizeof(uint32_t), hipHostMallocMapped);
+    if (err != hipSuccess) {
+      (void)hipHostFree(verifyPass);
+      if (doorbellAddr != nullptr) {
+        bool doorbellOnDevice = (config->memoryMode & 0x4) != 0;
+        if (doorbellOnDevice) {
+          hsa_memory_free(doorbellAddr);
+        } else {
+          xio::freeHostMemory(doorbellAddr, XIO_HOST_MEM_MAPPED);
+        }
+      }
+      return err;
+    }
+
+    *verifyPass = 0;
+    *verifyFail = 0;
+  }
+
   if (config->numThreads > 0) {
     // Check hardware concurrency for CPU threads
     unsigned hardwareThreads = std::thread::hardware_concurrency();
@@ -902,8 +1027,6 @@ hipError_t run(XioEndpointConfig* config) {
     std::this_thread::sleep_for(std::chrono::microseconds(100));
   }
 
-  hipError_t err = hipSuccess;
-
   if (emulate) {
     // Emulation mode: run kernel logic on CPU threads instead of GPU
     std::vector<std::thread> gpuEmulationThreads;
@@ -915,7 +1038,9 @@ hipError_t run(XioEndpointConfig* config) {
                                        config->endTimes, config->timingStats,
                                        config->iterations, config->numThreads,
                                        config->delayNs, doorbell, doorbellPtr,
-                                       queueSize, t);
+                                       queueSize, t, testEpConfig->verify,
+                                       testEpConfig->seed, verifyPass,
+                                       verifyFail);
     }
 
     // Wait for all emulation threads to complete
@@ -924,33 +1049,23 @@ hipError_t run(XioEndpointConfig* config) {
     }
   } else {
     uint32_t* doorbellPtr = static_cast<uint32_t*>(doorbellAddr);
-    uint32_t* d_vPass = nullptr;
-    uint32_t* d_vFail = nullptr;
-    if (testEpConfig->verify) {
-      (void)hipHostMalloc(&d_vPass, sizeof(uint32_t), hipHostMallocMapped);
-      (void)hipHostMalloc(&d_vFail, sizeof(uint32_t), hipHostMallocMapped);
-      if (d_vPass)
-        *d_vPass = 0;
-      if (d_vFail)
-        *d_vFail = 0;
-    }
 
     hipLaunchKernelGGL(endpoint_kernel, dim3(1), dim3(config->numThreads), 0, 0,
                        sqePtr, cqePtr, config->startTimes, config->endTimes,
                        config->timingStats, config->iterations,
                        config->numThreads, config->delayNs, doorbell,
                        doorbellPtr, queueSize, config->stopRequested,
-                       testEpConfig->verify, testEpConfig->seed, d_vPass,
-                       d_vFail);
+                       testEpConfig->verify, testEpConfig->seed, verifyPass,
+                       verifyFail);
 
     err = hipGetLastError();
     if (err != hipSuccess) {
       for (auto& thread : cpuThreadHandles)
         thread.join();
-      if (d_vPass)
-        (void)hipHostFree(d_vPass);
-      if (d_vFail)
-        (void)hipHostFree(d_vFail);
+      if (verifyPass)
+        (void)hipHostFree(verifyPass);
+      if (verifyFail)
+        (void)hipHostFree(verifyFail);
       return err;
     }
 
@@ -958,22 +1073,22 @@ hipError_t run(XioEndpointConfig* config) {
     if (err != hipSuccess) {
       for (auto& thread : cpuThreadHandles)
         thread.join();
-      if (d_vPass)
-        (void)hipHostFree(d_vPass);
-      if (d_vFail)
-        (void)hipHostFree(d_vFail);
+      if (verifyPass)
+        (void)hipHostFree(verifyPass);
+      if (verifyFail)
+        (void)hipHostFree(verifyFail);
       return err;
     }
-
-    if (testEpConfig->verify && d_vPass && d_vFail) {
-      config->verifyPass = *d_vPass;
-      config->verifyFail = *d_vFail;
-    }
-    if (d_vPass)
-      (void)hipHostFree(d_vPass);
-    if (d_vFail)
-      (void)hipHostFree(d_vFail);
   }
+
+  if (testEpConfig->verify && verifyPass != nullptr && verifyFail != nullptr) {
+    config->verifyPass = *verifyPass;
+    config->verifyFail = *verifyFail;
+  }
+  if (verifyPass)
+    (void)hipHostFree(verifyPass);
+  if (verifyFail)
+    (void)hipHostFree(verifyFail);
 
   // Join CPU threads if they were launched
   for (auto& thread : cpuThreadHandles) {
