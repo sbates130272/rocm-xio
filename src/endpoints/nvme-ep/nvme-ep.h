@@ -107,9 +107,28 @@ struct nvmeBufferParams {
   uint32_t readNumPages;        /**< Entries in readPagePhysAddrs. */
   uint32_t writeNumPages;       /**< Entries in writePagePhysAddrs. */
   uint64_t* prpListPool;        /**< PRP list backing storage for commands. */
+  uint64_t* prpListPageDmas;    /**< DMA address per PRP list command slot. */
   uint64_t prpListPoolDma;      /**< DMA address of prpListPool. */
   uint32_t prpEntriesPerCmd;    /**< PRP entries reserved per command. */
 };
+
+__host__ __device__ static inline uint32_t prpListEntriesPerPage() {
+  return NVME_PAGE_SIZE / sizeof(uint64_t);
+}
+
+__host__ __device__ static inline uint64_t prpListDmaForSlot(
+  const nvmeBufferParams& params, uint32_t slot) {
+  if (params.prpListPageDmas)
+    return params.prpListPageDmas[slot];
+  if (params.prpListPoolDma && params.prpEntriesPerCmd) {
+    uint32_t stride = params.prpEntriesPerCmd;
+    if (stride < prpListEntriesPerPage())
+      stride = prpListEntriesPerPage();
+    return params.prpListPoolDma +
+           (uint64_t)slot * stride * sizeof(uint64_t);
+  }
+  return 0;
+}
 
 /**
  * Drive NVMe endpoint I/O operations from GPU device code
