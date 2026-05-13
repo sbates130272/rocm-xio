@@ -97,6 +97,60 @@ xio_add_script_test(
 set_tests_properties(rdma-xio-loopback-4k PROPERTIES
   FIXTURES_REQUIRED RDMA_HW)
 
+# --- GPU RDMA loopback (1 KB) -----------------------
+
+xio_add_script_test(
+  NAME rdma-xio-loopback-1k
+  SCRIPT ${_wrapper}
+  LABELS hardware rdma verify
+  TIMEOUT 120
+  ARGS ${_xio_script}
+  ENVIRONMENT
+    "TRANSFER_SIZE=1024"
+    "LFSR_SEED=0x9abc"
+    "ITERATIONS=1"
+    "TEST_BIN=${_test_bin}"
+    "RDMA_CORE_LIB=${_rdma_lib}"
+)
+set_tests_properties(rdma-xio-loopback-1k PROPERTIES
+  FIXTURES_REQUIRED RDMA_HW)
+
+# --- GPU RDMA loopback (64 KB) ----------------------
+
+xio_add_script_test(
+  NAME rdma-xio-loopback-64k
+  SCRIPT ${_wrapper}
+  LABELS hardware rdma verify
+  TIMEOUT 120
+  ARGS ${_xio_script}
+  ENVIRONMENT
+    "TRANSFER_SIZE=65536"
+    "LFSR_SEED=0x2468"
+    "ITERATIONS=1"
+    "TEST_BIN=${_test_bin}"
+    "RDMA_CORE_LIB=${_rdma_lib}"
+)
+set_tests_properties(rdma-xio-loopback-64k PROPERTIES
+  FIXTURES_REQUIRED RDMA_HW)
+
+# --- GPU RDMA loopback (4 KB, 8 iterations) ---------
+
+xio_add_script_test(
+  NAME rdma-xio-loopback-4k-iter8
+  SCRIPT ${_wrapper}
+  LABELS hardware rdma verify
+  TIMEOUT 180
+  ARGS ${_xio_script}
+  ENVIRONMENT
+    "TRANSFER_SIZE=4096"
+    "LFSR_SEED=0x1357"
+    "ITERATIONS=8"
+    "TEST_BIN=${_test_bin}"
+    "RDMA_CORE_LIB=${_rdma_lib}"
+)
+set_tests_properties(rdma-xio-loopback-4k-iter8 PROPERTIES
+  FIXTURES_REQUIRED RDMA_HW)
+
 # --- xio-tester batch-size 4 -----------------------
 
 xio_add_script_test(
@@ -112,6 +166,23 @@ xio_add_script_test(
     "BUILD_DIR=${CMAKE_BINARY_DIR}"
 )
 set_tests_properties(rdma-ep-batch-4 PROPERTIES
+  FIXTURES_REQUIRED RDMA_HW)
+
+# --- xio-tester batch-size 8 -----------------------
+
+xio_add_script_test(
+  NAME rdma-ep-batch-8
+  SCRIPT ${_wrapper}
+  LABELS hardware rdma verify
+  TIMEOUT 120
+  ARGS ${_tester_script}
+  ENVIRONMENT
+    "BATCH_SIZE=8"
+    "ITERATIONS=128"
+    "TRANSFER_SIZE=4096"
+    "BUILD_DIR=${CMAKE_BINARY_DIR}"
+)
+set_tests_properties(rdma-ep-batch-8 PROPERTIES
   FIXTURES_REQUIRED RDMA_HW)
 
 # --- xio-tester num-queues 2 ----------------------
@@ -131,6 +202,23 @@ xio_add_script_test(
 set_tests_properties(rdma-ep-num-queues-2 PROPERTIES
   FIXTURES_REQUIRED RDMA_HW)
 
+# --- xio-tester num-queues 4 ----------------------
+
+xio_add_script_test(
+  NAME rdma-ep-num-queues-4
+  SCRIPT ${_wrapper}
+  LABELS hardware rdma verify
+  TIMEOUT 120
+  ARGS ${_tester_script}
+  ENVIRONMENT
+    "NUM_QUEUES=4"
+    "ITERATIONS=128"
+    "TRANSFER_SIZE=4096"
+    "BUILD_DIR=${CMAKE_BINARY_DIR}"
+)
+set_tests_properties(rdma-ep-num-queues-4 PROPERTIES
+  FIXTURES_REQUIRED RDMA_HW)
+
 # --- xio-tester batch-4 + num-queues-2 ------------
 
 xio_add_script_test(
@@ -147,4 +235,39 @@ xio_add_script_test(
     "BUILD_DIR=${CMAKE_BINARY_DIR}"
 )
 set_tests_properties(rdma-ep-batch-4-queues-2 PROPERTIES
+  FIXTURES_REQUIRED RDMA_HW)
+
+# --- xio-tester batch-8 + num-queues-4 ------------
+
+xio_add_script_test(
+  NAME rdma-ep-batch-8-queues-4
+  SCRIPT ${_wrapper}
+  LABELS hardware rdma verify
+  TIMEOUT 120
+  ARGS ${_tester_script}
+  ENVIRONMENT
+    "BATCH_SIZE=8"
+    "NUM_QUEUES=4"
+    "ITERATIONS=128"
+    "TRANSFER_SIZE=4096"
+    "BUILD_DIR=${CMAKE_BINARY_DIR}"
+)
+set_tests_properties(rdma-ep-batch-8-queues-4 PROPERTIES
+  FIXTURES_REQUIRED RDMA_HW)
+
+# --- xio-tester verify-off smoke -------------------
+
+xio_add_script_test(
+  NAME rdma-ep-verify-off
+  SCRIPT ${_wrapper}
+  LABELS hardware rdma
+  TIMEOUT 120
+  ARGS ${_tester_script}
+  ENVIRONMENT
+    "VERIFY=false"
+    "ITERATIONS=64"
+    "TRANSFER_SIZE=4096"
+    "BUILD_DIR=${CMAKE_BINARY_DIR}"
+)
+set_tests_properties(rdma-ep-verify-off PROPERTIES
   FIXTURES_REQUIRED RDMA_HW)

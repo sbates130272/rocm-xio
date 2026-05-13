@@ -102,6 +102,34 @@ xio_add_script_test(
     "XIO_TESTER=${_xio_tester}"
 )
 
+xio_add_script_test(
+  NAME nvme-verify-rand-host-mem-batch-8
+  SCRIPT ${_verify_wrapper}
+  LABELS hardware nvme verify
+  TIMEOUT 30
+  ARGS ${_rand_script}
+  ENVIRONMENT
+    "MEMORY_MODE=0"
+    "NUM_WRITES=16"
+    "BATCH_SIZE=8"
+    "LFSR_SEED=0xd00d"
+    "XIO_TESTER=${_xio_tester}"
+)
+
+xio_add_script_test(
+  NAME nvme-verify-rand-device-mem-queues-2
+  SCRIPT ${_verify_wrapper}
+  LABELS hardware nvme verify
+  TIMEOUT 30
+  ARGS ${_rand_script}
+  ENVIRONMENT
+    "MEMORY_MODE=8"
+    "NUM_WRITES=16"
+    "NUM_QUEUES=2"
+    "LFSR_SEED=0xfade"
+    "XIO_TESTER=${_xio_tester}"
+)
+
 # --- Batch-size smoke tests -----------------------------
 # Verify the kernel completes for various doorbell
 # batching configurations.  All use random access with
@@ -126,6 +154,15 @@ xio_add_script_test(
   LABELS hardware nvme smoke
   TIMEOUT 30
   ARGS ${_smoke_common} --batch-size 4
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
+)
+
+xio_add_script_test(
+  NAME nvme-smoke-batch-8
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme smoke
+  TIMEOUT 30
+  ARGS ${_smoke_common} --batch-size 8
   ENVIRONMENT "XIO_TESTER=${_xio_tester}"
 )
 
@@ -179,6 +216,15 @@ xio_add_script_test(
 )
 
 xio_add_script_test(
+  NAME nvme-smoke-queues-8
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme smoke
+  TIMEOUT 30
+  ARGS ${_smoke_common} --num-queues 8
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
+)
+
+xio_add_script_test(
   NAME nvme-smoke-queues-2-batch-16
   SCRIPT ${_smoke_wrapper}
   LABELS hardware nvme smoke
@@ -187,6 +233,18 @@ xio_add_script_test(
     --lfsr-seed 32 --read-io 64
     --queue-length 128 --num-queues 2
     --batch-size 16
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
+)
+
+xio_add_script_test(
+  NAME nvme-smoke-queues-4-batch-8
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme smoke
+  TIMEOUT 30
+  ARGS --access-pattern random --lbas-per-io 1
+    --lfsr-seed 40 --read-io 96
+    --queue-length 128 --num-queues 4
+    --batch-size 8
   ENVIRONMENT "XIO_TESTER=${_xio_tester}"
 )
 
@@ -210,6 +268,15 @@ xio_add_script_test(
   TIMEOUT 30
   ARGS ${_smoke_common}
     -m 3 --less-timing --batch-size 4
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
+)
+
+xio_add_script_test(
+  NAME nvme-smoke-memmode-11
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme smoke
+  TIMEOUT 30
+  ARGS ${_smoke_common} -m 11 --less-timing
   ENVIRONMENT "XIO_TESTER=${_xio_tester}"
 )
 
@@ -263,6 +330,28 @@ xio_add_script_test(
   ARGS ${_smoke_multi_lba}
     --lbas-per-io 32 -m 0
     --data-buffer-size 2097152
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
+)
+
+xio_add_script_test(
+  NAME nvme-smoke-lbas-per-io-64-device
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme smoke
+  TIMEOUT 30
+  ARGS ${_smoke_multi_lba}
+    --lbas-per-io 64 -m 8
+    --data-buffer-size 4194304
+  ENVIRONMENT "XIO_TESTER=${_xio_tester}"
+)
+
+xio_add_script_test(
+  NAME nvme-smoke-lbas-per-io-64-host
+  SCRIPT ${_smoke_wrapper}
+  LABELS hardware nvme smoke
+  TIMEOUT 30
+  ARGS ${_smoke_multi_lba}
+    --lbas-per-io 64 -m 0
+    --data-buffer-size 4194304
   ENVIRONMENT "XIO_TESTER=${_xio_tester}"
 )
 
