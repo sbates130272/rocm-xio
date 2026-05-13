@@ -53,7 +53,7 @@
     },
     {
       "name": "system",
-      "displayName": "System tests (GPU required)",
+      "displayName": "System tests (emulation or GPU)",
       "inherits": "base",
       "filter": { "include": { "label": "system" } }
     },

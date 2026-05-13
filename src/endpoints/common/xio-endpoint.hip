@@ -91,6 +91,14 @@ public:
     return &config_;
   }
 
+  __host__ std::string validateConfig(void* endpointConfig) override {
+    if (endpointConfig) {
+      auto* cfg = static_cast<test_ep::TestEpConfig*>(endpointConfig);
+      return test_ep::validateConfig(cfg);
+    }
+    return "missing test-ep configuration";
+  }
+
   __host__ unsigned getIterations(void* endpointConfig) const override {
     if (endpointConfig) {
       auto* cfg = static_cast<test_ep::TestEpConfig*>(endpointConfig);

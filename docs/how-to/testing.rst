@@ -32,7 +32,7 @@ The project provides six test presets in ``CMakePresets.json``:
 Preset             Description                     Hardware
 =================  ==============================  ================
 ``unit``           CPU-only unit tests             CPU-only
-``system``         System tests (emulation)        GPU-only
+``system``         System tests                    CPU-only or GPU
 ``hardware``       Hardware integration tests      GPU + RDMA NIC
 ``sweep``          Multi-seed loopback sweep       GPU + RDMA NIC
 ``integration``    Install-integration examples    CPU-only
@@ -64,7 +64,8 @@ Every test carries one or more CTest labels for filtering with
 Label         Definition
 ============  =========================================
 ``unit``      CPU-only, no GPU or NIC (runs in CI)
-``system``    Needs a `HIP-capable GPU`_
+``system``    System-level tests; some are CPU-only emulation tests,
+              others need a `HIP-capable GPU`_
 ``hardware``  Needs a GPU and a specific RDMA NIC
 ``sweep``     Parameterized multi-seed loopback runs
 ``stress``    Long-running (timeout: 600 seconds)
@@ -104,13 +105,15 @@ These run in CI without hardware:
   ``ExtractBusNumber``, ``GetBusIdDistance``, ``GetLcaDepth``
 - ``test-extract-endpoint`` -- CLI argument parser:
   ``extractEndpointName()``
-- ``test-ep-config`` -- test-ep configuration defaults
+- ``test-ep-config`` -- test-ep configuration defaults and validation
 
 System tests
 ------------
 
-- ``test-ep-emulate`` -- Full SQE/CQE round-trip in emulation mode
-  (GPU required)
+- ``test-ep-emulate`` -- Library-level SQE/CQE round-trip in emulation
+  mode, including LFSR verification (CPU-only)
+- ``test-ep-cli-emulate*`` -- ``xio-tester test-ep --emulate`` smoke,
+  verification, doorbell, and expected-failure coverage (CPU-only)
 
 Hardware tests
 --------------
@@ -463,8 +466,8 @@ The GitHub Actions workflows run tests as follows:
 
 - **build-check**: ``ctest -L "unit"`` -- CPU-only tests in a
   ``rocm/dev-ubuntu-24.04:7.2`` container (no GPU)
-- **test-emulate**: ``ctest -L "unit"`` plus
-  ``xio-tester test-ep --emulate`` (no GPU, emulation mode)
+- **test-emulate**: ``ctest -L "unit"`` plus ``ctest -L "emulate"``
+  (no GPU, emulation mode)
 
 Hardware and sweep tests are not run in CI -- they require physical
 NIC and GPU hardware.

@@ -121,6 +121,40 @@ __host__ cqeType cqeGenFromSqe(const sqeType* sqeData) {
   return result;
 }
 
+__host__ __device__ static void fillPayload(sqeType& msg, unsigned threadId,
+                                            unsigned iteration,
+                                            bool doVerify,
+                                            uint32_t baseSeed) {
+  if (doVerify) {
+    uint32_t iterSeed = baseSeed + iteration;
+    xio::DataPatternParams fp{reinterpret_cast<uint8_t*>(&msg.data[1]),
+                              4 * sizeof(uint64_t),
+                              0,
+                              static_cast<uint32_t>(4 * sizeof(uint64_t)),
+                              iterSeed,
+                              nullptr};
+    xio::dataPattern(false, fp);
+    return;
+  }
+
+  for (int j = 1; j < 5; ++j) {
+    msg.data[j] = 0x123456789ABCDEF0ULL + threadId + iteration + j;
+  }
+}
+
+__host__ __device__ static bool verifyPayload(sqeType& msg,
+                                              unsigned iteration,
+                                              uint32_t baseSeed) {
+  uint32_t iterSeed = baseSeed + iteration;
+  xio::DataPatternParams vp{reinterpret_cast<uint8_t*>(&msg.data[1]),
+                            4 * sizeof(uint64_t),
+                            0,
+                            static_cast<uint32_t>(4 * sizeof(uint64_t)),
+                            iterSeed,
+                            nullptr};
+  return xio::dataPattern(true, vp);
+}
+
 // CPU thread function for doorbell mode
 // Polls doorbell address and processes SQEs from the submission queue
 static void cpuThreadDoorbell(volatile sqeType* sqeQueue,
@@ -424,10 +458,7 @@ __global__ void endpoint_kernel(
       }
       msg.data[0] = actualDelayNs;
 
-      // Fill remaining data payload
-      for (int j = 1; j < 5; ++j) {
-        msg.data[j] = 0x123456789ABCDEF0ULL + tid + i + j;
-      }
+      fillPayload(msg, tid, i, doVerify, baseSeed);
 
       // Get next sequence number atomically (shared across all threads)
       uint32_t seq = atomicAdd(&globalSeq, 1U);
@@ -479,6 +510,15 @@ __global__ void endpoint_kernel(
                 unsigned long long int duration = endTime - startTime;
                 updateTimingStats(timingStats, duration);
               }
+              if (doVerify) {
+                if (verifyPayload(sqePtr[sqeIndex], i, baseSeed)) {
+                  if (verifyPass)
+                    atomicAdd(verifyPass, 1u);
+                } else {
+                  if (verifyFail)
+                    atomicAdd(verifyFail, 1u);
+                }
+              }
               break;
             }
           }
@@ -525,19 +565,7 @@ __global__ void endpoint_kernel(
       }
       msg.data[0] = actualDelayNs;
 
-      if (doVerify) {
-        uint32_t iterSeed = baseSeed + i;
-        xio::DataPatternParams fp{reinterpret_cast<uint8_t*>(&msg.data[1]),
-                                  4 * sizeof(uint64_t),
-                                  0,
-                                  static_cast<uint32_t>(4 * sizeof(uint64_t)),
-                                  iterSeed,
-                                  nullptr};
-        xio::dataPattern(false, fp);
-      } else {
-        for (int j = 1; j < 5; ++j)
-          msg.data[j] = 0x123456789ABCDEF0ULL + tid + i + j;
-      }
+      fillPayload(msg, tid, i, doVerify, baseSeed);
 
       xio::XioComEnqueue<sizeof(sqeType), true>(&msg, mySqe);
 
@@ -567,14 +595,7 @@ __global__ void endpoint_kernel(
       }
 
       if (doVerify) {
-        uint32_t iterSeed = baseSeed + i;
-        xio::DataPatternParams vp{reinterpret_cast<uint8_t*>(&mySqe->data[1]),
-                                  4 * sizeof(uint64_t),
-                                  0,
-                                  static_cast<uint32_t>(4 * sizeof(uint64_t)),
-                                  iterSeed,
-                                  nullptr};
-        if (xio::dataPattern(true, vp)) {
+        if (verifyPayload(*mySqe, i, baseSeed)) {
           if (verifyPass)
             atomicAdd(verifyPass, 1u);
         } else {
@@ -591,13 +612,22 @@ __global__ void endpoint_kernel(
   }
 }
 
+struct CpuEmulationState {
+  std::atomic<uint32_t> sequence{0};
+  std::atomic<uint32_t> barrierCounter{0};
+  std::atomic<uint32_t> barrierGeneration{0};
+  std::atomic<uint32_t> verifyPass{0};
+  std::atomic<uint32_t> verifyFail{0};
+};
+
 // CPU emulation of endpoint kernel - runs kernel logic on CPU threads
 static void endpoint_kernel_cpu_emulate(
   sqeType* sqePtr, cqeType* cqePtr, unsigned long long int* startTimes,
   unsigned long long int* endTimes, XioTimingStats* timingStats,
   unsigned iterations, unsigned numThreads, long long delayNs,
   unsigned doorbell, uint32_t* doorbellAddr, unsigned queueSize,
-  unsigned threadId) {
+  unsigned threadId, bool doVerify, uint32_t baseSeed,
+  CpuEmulationState* state) {
   // Use per-thread buffers if multi-threaded (non-doorbell mode)
   bool doorbellMode = (doorbell > 0);
   sqeType* mySqe = (numThreads > 1 && !doorbellMode) ? &sqePtr[threadId]
@@ -623,18 +653,11 @@ static void endpoint_kernel_cpu_emulate(
 
   if (doorbellMode) {
     // Doorbell mode: write SQEs to circular queue and ring doorbell
-    // Use atomic counter for sequence numbers across all threads
-    // Note: This is per-thread-call, so we need to synchronize initialization
-    static std::atomic<uint32_t> globalSeq{0};
-    // Use a barrier to synchronize threads before doorbell updates
-    static std::atomic<uint32_t> barrierCounter{0};
-    static std::atomic<uint32_t> barrierGeneration{0};
-    // Reset sequence counter at start of first iteration for first thread
-    if (threadId == 0 && iterations > 0) {
-      globalSeq.store(0, std::memory_order_relaxed);
-      barrierCounter.store(0, std::memory_order_relaxed);
-      barrierGeneration.store(0, std::memory_order_relaxed);
-    }
+    // Use counters owned by this run so repeated or parallel tests do not
+    // share static state.
+    std::atomic<uint32_t>& sequence = state->sequence;
+    std::atomic<uint32_t>& barrierCounter = state->barrierCounter;
+    std::atomic<uint32_t>& barrierGeneration = state->barrierGeneration;
 
     for (unsigned i = 0; i < iterations; ++i) {
       // Record start time for this iteration (when SQE is posted)
@@ -666,13 +689,10 @@ static void endpoint_kernel_cpu_emulate(
       }
       msg.data[0] = actualDelayNs;
 
-      // Fill remaining data payload
-      for (int j = 1; j < 5; ++j) {
-        msg.data[j] = 0x123456789ABCDEF0ULL + threadId + i + j;
-      }
+      fillPayload(msg, threadId, i, doVerify, baseSeed);
 
       // Get next sequence number atomically
-      uint32_t seq = globalSeq.fetch_add(1);
+      uint32_t seq = sequence.fetch_add(1);
       unsigned sqeIndex = seq % queueSize;
 
       // Write SQE
@@ -746,6 +766,13 @@ static void endpoint_kernel_cpu_emulate(
                 unsigned long long int duration = endTime - startTime;
                 updateTimingStats(timingStats, duration);
               }
+              if (doVerify) {
+                if (verifyPayload(sqePtr[sqeIndex], i, baseSeed)) {
+                  state->verifyPass.fetch_add(1, std::memory_order_relaxed);
+                } else {
+                  state->verifyFail.fetch_add(1, std::memory_order_relaxed);
+                }
+              }
               break;
             }
           }
@@ -791,10 +818,7 @@ static void endpoint_kernel_cpu_emulate(
       }
       msg.data[0] = actualDelayNs;
 
-      // Fill remaining data payload
-      for (int j = 1; j < 5; ++j) {
-        msg.data[j] = 0x123456789ABCDEF0ULL + threadId + i + j;
-      }
+      fillPayload(msg, threadId, i, doVerify, baseSeed);
 
       // Write message to memory
       *mySqe = msg;
@@ -826,8 +850,28 @@ static void endpoint_kernel_cpu_emulate(
         unsigned long long int duration = endTime - startTime;
         updateTimingStats(timingStats, duration);
       }
+      if (doVerify) {
+        if (verifyPayload(*mySqe, i, baseSeed)) {
+          state->verifyPass.fetch_add(1, std::memory_order_relaxed);
+        } else {
+          state->verifyFail.fetch_add(1, std::memory_order_relaxed);
+        }
+      }
     }
   }
+}
+
+__host__ std::string validateConfig(TestEpConfig* config) {
+  if (config == nullptr) {
+    return "missing test-ep configuration";
+  }
+  if (config->iterations == 0) {
+    return "test-ep requires at least one iteration";
+  }
+  if (!config->enableCpuThreads) {
+    return "test-ep requires CPU responder threads";
+  }
+  return std::string();
 }
 
 hipError_t run(XioEndpointConfig* config) {
@@ -838,6 +882,11 @@ hipError_t run(XioEndpointConfig* config) {
     config->endpointConfig);
   unsigned doorbell = (testEpConfig != nullptr) ? testEpConfig->doorbell : 0;
   bool emulate = (testEpConfig != nullptr) ? testEpConfig->emulate : false;
+  bool enableCpuThreads = (testEpConfig != nullptr)
+                            ? testEpConfig->enableCpuThreads
+                            : true;
+  bool doVerify = (testEpConfig != nullptr) ? testEpConfig->verify : false;
+  uint32_t baseSeed = (testEpConfig != nullptr) ? testEpConfig->seed : 1;
 
   // Cast void* to endpoint-specific types
   sqeType* sqePtr = static_cast<sqeType*>(config->submissionQueue);
@@ -883,7 +932,7 @@ hipError_t run(XioEndpointConfig* config) {
     std::atomic_thread_fence(std::memory_order_seq_cst);
   }
 
-  if (config->numThreads > 0) {
+  if (enableCpuThreads && config->numThreads > 0) {
     // Check hardware concurrency for CPU threads
     unsigned hardwareThreads = std::thread::hardware_concurrency();
     if (config->numThreads > hardwareThreads && doorbell == 0) {
@@ -907,6 +956,7 @@ hipError_t run(XioEndpointConfig* config) {
   if (emulate) {
     // Emulation mode: run kernel logic on CPU threads instead of GPU
     std::vector<std::thread> gpuEmulationThreads;
+    CpuEmulationState emulationState;
 
     // Launch CPU threads to emulate GPU kernel
     for (unsigned t = 0; t < config->numThreads; ++t) {
@@ -915,18 +965,25 @@ hipError_t run(XioEndpointConfig* config) {
                                        config->endTimes, config->timingStats,
                                        config->iterations, config->numThreads,
                                        config->delayNs, doorbell, doorbellPtr,
-                                       queueSize, t);
+                                       queueSize, t, doVerify, baseSeed,
+                                       &emulationState);
     }
 
     // Wait for all emulation threads to complete
     for (auto& thread : gpuEmulationThreads) {
       thread.join();
     }
+    if (doVerify) {
+      config->verifyPass = emulationState.verifyPass.load(
+        std::memory_order_relaxed);
+      config->verifyFail = emulationState.verifyFail.load(
+        std::memory_order_relaxed);
+    }
   } else {
     uint32_t* doorbellPtr = static_cast<uint32_t*>(doorbellAddr);
     uint32_t* d_vPass = nullptr;
     uint32_t* d_vFail = nullptr;
-    if (testEpConfig->verify) {
+    if (doVerify) {
       (void)hipHostMalloc(&d_vPass, sizeof(uint32_t), hipHostMallocMapped);
       (void)hipHostMalloc(&d_vFail, sizeof(uint32_t), hipHostMallocMapped);
       if (d_vPass)
@@ -940,8 +997,7 @@ hipError_t run(XioEndpointConfig* config) {
                        config->timingStats, config->iterations,
                        config->numThreads, config->delayNs, doorbell,
                        doorbellPtr, queueSize, config->stopRequested,
-                       testEpConfig->verify, testEpConfig->seed, d_vPass,
-                       d_vFail);
+                       doVerify, baseSeed, d_vPass, d_vFail);
 
     err = hipGetLastError();
     if (err != hipSuccess) {
@@ -965,7 +1021,7 @@ hipError_t run(XioEndpointConfig* config) {
       return err;
     }
 
-    if (testEpConfig->verify && d_vPass && d_vFail) {
+    if (doVerify && d_vPass && d_vFail) {
       config->verifyPass = *d_vPass;
       config->verifyFail = *d_vFail;
     }

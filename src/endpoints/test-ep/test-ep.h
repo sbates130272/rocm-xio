@@ -7,6 +7,7 @@
 #define TEST_EP_H
 
 #include <cstdint>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -192,6 +193,14 @@ std::vector<std::thread> launchCpuThreads(
  *         failure.
  */
 hipError_t run(XioEndpointConfig* config);
+
+/**
+ * Validate test endpoint configuration.
+ *
+ * @param config Endpoint-specific configuration.
+ * @return Empty string when valid, otherwise a human-readable error.
+ */
+__host__ std::string validateConfig(TestEpConfig* config);
 
 } // namespace xio::test_ep
 

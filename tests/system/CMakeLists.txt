@@ -2,8 +2,9 @@
 #
 # SPDX-License-Identifier: MIT
 
-# System test aggregator -- tests here require a
-# HIP-capable GPU and are labelled "system".
+# System test aggregator -- tests here are labelled
+# "system"; some are CPU-only emulation tests, while
+# hardware-backed cases perform their own runtime skips.
 
 add_subdirectory(test-ep)
 add_subdirectory(coherence)
