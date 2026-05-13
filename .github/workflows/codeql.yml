@@ -1,0 +1,96 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+
+# Run GitHub's CodeQL static analysis against the C/C++ source.  The
+# `c-cpp` language pack covers .c/.cc/.cpp/.h/.hpp; HIP sources are
+# valid C++ for the purposes of CodeQL extraction.
+
+name: codeql
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - '**.hip'
+      - '**.cpp'
+      - '**.c'
+      - '**.h'
+      - '**.hpp'
+      - '**.cc'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - '.github/workflows/codeql.yml'
+  schedule:
+    # Weekly scan so newly-published CodeQL queries are exercised
+    # against the unchanged trunk.
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: CodeQL (${{ matrix.language }})
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    container:
+      image: rocm/dev-ubuntu-24.04:7.2
+      options: --user root
+    env:
+      LD_LIBRARY_PATH: /opt/rocm/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [c-cpp]
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y \
+            cmake \
+            curl \
+            libcli11-dev \
+            libdrm-dev
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+
+      - name: Configure and build with CMake
+        # Manual build because the autobuild step does not know about
+        # OFFLOAD_ARCH or ROCM_PATH.
+        run: |
+          cmake -S . -B build \
+            -DOFFLOAD_ARCH=gfx942:xnack+ \
+            -DROCM_PATH=/opt/rocm \
+            -DBUILD_TESTING=OFF
+          cmake --build build --target all -j "$(nproc)"
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
