@@ -68,6 +68,8 @@ Label         Definition
 ``hardware``  Needs a GPU and a specific RDMA NIC
 ``sweep``     Parameterized multi-seed loopback runs
 ``stress``    Long-running (timeout: 600 seconds)
+``smoke``     Short scripted checks (often paired with ``system`` or
+              ``hardware`` labels)
 ``rdma``      RDMA-related test
 ``common``    Common library utilities
 ``fixture``   CTest fixture (setup/teardown)
@@ -104,13 +106,17 @@ These run in CI without hardware:
   ``ExtractBusNumber``, ``GetBusIdDistance``, ``GetLcaDepth``
 - ``test-extract-endpoint`` -- CLI argument parser:
   ``extractEndpointName()``
-- ``test-ep-config`` -- test-ep configuration defaults
+- ``test-ep-config`` -- test-ep configuration defaults (including
+  ``verify`` and ``seed`` fields)
 
 System tests
 ------------
 
-- ``test-ep-emulate`` -- Full SQE/CQE round-trip in emulation mode
-  (GPU required)
+- ``test-ep-emulate`` -- Library API: polling, doorbell, and
+  multi-threaded emulate SQE/CQE paths (HIP host runtime)
+- ``test-ep-xio-tester-emulate-smoke`` -- ``xio-tester test-ep
+  --emulate`` CLI matrix (doorbell and ``--verify`` flags; label:
+  ``smoke``)
 
 Hardware tests
 --------------
