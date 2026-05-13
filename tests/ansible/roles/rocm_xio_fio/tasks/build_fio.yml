@@ -1,0 +1,77 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+---
+- name: Set fio source directory
+  ansible.builtin.set_fact:
+    _fio_effective_src: >-
+      {{ fio_local_src
+         if fio_local_src | length > 0
+         else fio_src_dir }}
+
+- name: Ensure fio source parent directory exists
+  become: true
+  ansible.builtin.file:
+    path: "{{ _fio_effective_src | dirname }}"
+    state: directory
+    mode: "0755"
+  when: fio_local_src | length == 0
+
+- name: Clone the fio fork carrying the rocm_xio ioengine
+  become: true
+  ansible.builtin.git:
+    repo: "{{ fio_repo }}"
+    dest: "{{ _fio_effective_src }}"
+    version: "{{ fio_ref }}"
+    update: true
+    force: false
+  when: fio_local_src | length == 0
+
+- name: Configure fio with the rocm-xio ioengine
+  become: true
+  ansible.builtin.command:
+    cmd: >-
+      ./configure
+      --prefix={{ fio_install_prefix }}
+      --enable-rocm-xio
+      --with-rocm-xio={{ rocm_xio_install_prefix }}
+      {{ fio_configure_extra_args | join(' ') }}
+    chdir: "{{ _fio_effective_src }}"
+    creates: "{{ _fio_effective_src }}/config-host.mak"
+  environment:
+    PATH: "{{ rocm_xio_install_prefix }}/bin:{{ ansible_env.PATH | default('/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin') }}"
+
+- name: Confirm rocm-xio engine was detected by configure
+  ansible.builtin.command:
+    cmd: grep -q '^CONFIG_ROCM_XIO=y' config-host.mak
+    chdir: "{{ _fio_effective_src }}"
+  changed_when: false
+
+- name: Build fio
+  become: true
+  community.general.make:
+    chdir: "{{ _fio_effective_src }}"
+    jobs: "{{ fio_make_jobs }}"
+  register: fio_build
+  changed_when: "'Built target' in (fio_build.stdout | default('')) or fio_build is changed"
+
+- name: Install fio
+  become: true
+  community.general.make:
+    chdir: "{{ _fio_effective_src }}"
+    target: install
+  register: fio_install
+  changed_when: "'install' in (fio_install.stdout | default(''))"
+
+- name: Confirm fio reports rocm_xio in --enghelp
+  ansible.builtin.command:
+    cmd: "{{ fio_install_prefix }}/bin/fio --enghelp"
+  register: fio_enghelp
+  changed_when: false
+
+- name: Fail when rocm_xio engine is missing from --enghelp
+  ansible.builtin.assert:
+    that: "'rocm_xio' in fio_enghelp.stdout"
+    fail_msg: >-
+      fio built successfully but the rocm_xio ioengine is not registered.
+      Re-run with --tags fio after fixing configure or library paths.

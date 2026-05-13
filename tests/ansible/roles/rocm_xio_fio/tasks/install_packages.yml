@@ -1,0 +1,58 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+---
+- name: Refresh apt cache
+  become: true
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install build prerequisites
+  become: true
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - cmake
+      - dkms
+      - git
+      - libcli11-dev
+      - libdrm-dev
+      - libnvme-dev
+      - linux-headers-{{ ansible_kernel }}
+      - pkg-config
+      - python3
+      - python3-pip
+    state: present
+
+- name: Install ROCm HIP and HSA development packages
+  become: true
+  ansible.builtin.apt:
+    name:
+      - hsa-rocr-dev
+      - rocm-hip-runtime
+      - rocm-hip-sdk
+      - rocminfo
+    state: present
+  register: rocm_pkg_install
+  failed_when:
+    - rocm_pkg_install.failed
+    - "'Unable to locate package' not in (rocm_pkg_install.msg | default(''))"
+  changed_when: rocm_pkg_install is changed
+
+- name: Warn when ROCm packages are missing
+  ansible.builtin.debug:
+    msg: >-
+      ROCm packages were not installed via apt. Make sure the AMD ROCm
+      apt repository is configured before re-running this role; see
+      https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/quick-start.html
+  when:
+    - rocm_pkg_install is failed or rocm_pkg_install is skipped
+
+- name: Verify hipcc is on PATH
+  ansible.builtin.command: hipcc --version
+  register: hipcc_check
+  changed_when: false
+  failed_when: hipcc_check.rc != 0
+  environment:
+    PATH: "/opt/rocm/bin:{{ ansible_env.PATH | default('/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin') }}"

@@ -1,0 +1,11 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+---
+profile: basic
+skip_list:
+  # Variables intentionally use rocm_xio_ and fio_ prefixes so the public
+  # interface matches the rocm-xio and fio names users already know.
+  - var-naming[no-role-prefix]
+exclude_paths:
+  - .cache/

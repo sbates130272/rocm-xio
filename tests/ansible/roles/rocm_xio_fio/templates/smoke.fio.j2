@@ -1,0 +1,24 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Rendered by tests/ansible/roles/rocm_xio_fio/templates/smoke.fio.j2
+[global]
+ioengine=rocm_xio
+filename={{ rocm_xio_smoke_filename }}
+rocm_xio_gpu_id={{ rocm_xio_smoke_gpu_id }}
+rocm_xio_queue_length={{ rocm_xio_smoke_queue_length }}
+rocm_xio_memory_mode={{ rocm_xio_smoke_memory_mode }}
+rocm_xio_profile=1
+direct=1
+thread=1
+iodepth={{ rocm_xio_smoke_iodepth }}
+rw={{ rocm_xio_smoke_rw }}
+bs={{ rocm_xio_smoke_block_size }}
+size=100%
+group_reporting=1
+time_based=1
+runtime={{ rocm_xio_smoke_runtime }}
+
+[rocm_xio_smoke]
+rocm_xio_queue_id=1

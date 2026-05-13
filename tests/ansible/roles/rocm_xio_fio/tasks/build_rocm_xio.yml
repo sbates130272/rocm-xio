@@ -1,0 +1,65 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+---
+- name: Set rocm-xio source directory
+  ansible.builtin.set_fact:
+    _rocm_xio_effective_src: >-
+      {{ rocm_xio_local_src
+         if rocm_xio_local_src | length > 0
+         else rocm_xio_src_dir }}
+
+- name: Ensure rocm-xio source parent directory exists
+  become: true
+  ansible.builtin.file:
+    path: "{{ _rocm_xio_effective_src | dirname }}"
+    state: directory
+    mode: "0755"
+  when: rocm_xio_local_src | length == 0
+
+- name: Clone rocm-xio sources
+  become: true
+  ansible.builtin.git:
+    repo: "{{ rocm_xio_repo }}"
+    dest: "{{ _rocm_xio_effective_src }}"
+    version: "{{ rocm_xio_ref }}"
+    update: true
+    force: false
+  when: rocm_xio_local_src | length == 0
+
+- name: Configure rocm-xio with CMake
+  become: true
+  ansible.builtin.command:
+    cmd: >-
+      cmake
+      -S {{ _rocm_xio_effective_src }}
+      -B {{ rocm_xio_build_dir }}
+      -DROCM_PATH={{ rocm_xio_install_prefix }}
+      -DCMAKE_BUILD_TYPE=Release
+      -DCMAKE_INSTALL_PREFIX={{ rocm_xio_install_prefix }}
+      -DBUILD_SHARED_LIBS={{ 'ON' if rocm_xio_build_shared else 'OFF' }}
+      -DBUILD_CLIENTS={{ 'ON' if rocm_xio_build_clients else 'OFF' }}
+      -DINSTALL_TESTER={{ 'ON' if rocm_xio_install_tester else 'OFF' }}
+      -DOFFLOAD_ARCH={{ rocm_xio_offload_arch }}
+    creates: "{{ rocm_xio_build_dir }}/CMakeCache.txt"
+  environment:
+    PATH: "{{ rocm_xio_install_prefix }}/bin:{{ ansible_env.PATH | default('/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin') }}"
+
+- name: Build rocm-xio
+  become: true
+  ansible.builtin.command:
+    cmd: cmake --build {{ rocm_xio_build_dir }} --parallel {{ fio_make_jobs }}
+  register: rocm_xio_build
+  changed_when: "'Built target' in (rocm_xio_build.stdout | default(''))"
+
+- name: Install rocm-xio
+  become: true
+  ansible.builtin.command:
+    cmd: cmake --install {{ rocm_xio_build_dir }} --prefix {{ rocm_xio_install_prefix }}
+  register: rocm_xio_install
+  changed_when: "'Installing' in (rocm_xio_install.stdout | default(''))"
+
+- name: Refresh dynamic linker cache
+  become: true
+  ansible.builtin.command: ldconfig
+  changed_when: false

@@ -1,0 +1,37 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+---
+- name: Require rocm_xio_smoke_filename when running the smoke test
+  ansible.builtin.assert:
+    that: rocm_xio_smoke_filename | length > 0
+    fail_msg: >-
+      Set rocm_xio_smoke_filename to a disposable NVMe namespace path
+      (for example /dev/disk/by-id/nvme-...) before enabling the smoke test.
+
+- name: Refuse to overwrite the namespace by default
+  ansible.builtin.assert:
+    that: rocm_xio_smoke_rw in ['read', 'randread']
+    fail_msg: >-
+      rocm_xio_smoke_rw must stay read-only (read or randread) unless you
+      explicitly point at a disposable target. Override this guard in the
+      playbook if and only if the namespace is safe to overwrite.
+
+- name: Render rocm_xio smoke job file
+  become: true
+  ansible.builtin.template:
+    src: smoke.fio.j2
+    dest: /etc/rocm-xio-smoke.fio
+    mode: "0644"
+
+- name: Run fio rocm_xio smoke job
+  become: true
+  ansible.builtin.command:
+    cmd: "{{ fio_install_prefix }}/bin/fio /etc/rocm-xio-smoke.fio --output-format=normal"
+  environment: "{{ rocm_xio_smoke_extra_env }}"
+  register: smoke_run
+  changed_when: false
+
+- name: Show fio smoke summary
+  ansible.builtin.debug:
+    msg: "{{ smoke_run.stdout_lines[-20:] }}"

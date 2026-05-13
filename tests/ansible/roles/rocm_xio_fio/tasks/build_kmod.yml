@@ -1,0 +1,58 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+---
+- name: Build the rocm-xio kernel module
+  become: true
+  community.general.make:
+    chdir: "{{ _rocm_xio_effective_src }}/kernel/rocm-xio"
+  register: kmod_build
+  notify: rocm_xio_kmod_changed
+
+- name: Install the rocm-xio kernel module
+  become: true
+  community.general.make:
+    chdir: "{{ _rocm_xio_effective_src }}/kernel/rocm-xio"
+    target: install
+  register: kmod_install
+  notify: rocm_xio_kmod_changed
+
+- name: Install rocm-xio udev rules
+  become: true
+  ansible.builtin.copy:
+    src: "{{ _rocm_xio_effective_src }}/udev/{{ item }}"
+    dest: "/etc/udev/rules.d/{{ item }}"
+    remote_src: true
+    mode: "0644"
+  loop:
+    - 99-rocm-xio-char.rules
+    - 99-rocm-xio-rdma.rules
+    - 99-rocm-xio-vfio.rules
+    - 99-rocm-xio-nvme.rules
+  failed_when: false
+  notify: rocm_xio_udev_changed
+
+- name: Flush handlers so depmod and udev settle before modprobe
+  ansible.builtin.meta: flush_handlers
+
+- name: Load the rocm-xio kernel module
+  become: true
+  community.general.modprobe:
+    name: rocm-xio
+    state: present
+  when: rocm_xio_kmod_load | bool
+
+- name: Wait for /dev/rocm-xio to appear
+  ansible.builtin.wait_for:
+    path: /dev/rocm-xio
+    state: present
+    timeout: 10
+  when: rocm_xio_kmod_load | bool
+
+- name: Ensure /dev/rocm-xio is group-accessible
+  become: true
+  ansible.builtin.file:
+    path: /dev/rocm-xio
+    group: "{{ rocm_xio_device_group }}"
+    mode: "0660"
+  when: rocm_xio_kmod_load | bool

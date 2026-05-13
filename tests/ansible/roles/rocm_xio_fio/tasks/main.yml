@@ -1,0 +1,36 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+---
+- name: Verify supported distribution
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] == 'Debian'
+      - ansible_facts['distribution'] == 'Ubuntu'
+    fail_msg: >-
+      The rocm_xio_fio role currently supports Ubuntu hosts only;
+      detected {{ ansible_facts['distribution'] | default('unknown') }}
+      {{ ansible_facts['distribution_version'] | default('') }}.
+
+- name: Install build and ROCm packages
+  ansible.builtin.import_tasks: install_packages.yml
+  when: rocm_xio_install_packages | bool
+  tags: [packages]
+
+- name: Build and install rocm-xio
+  ansible.builtin.import_tasks: build_rocm_xio.yml
+  tags: [rocm-xio, build]
+
+- name: Build and load the rocm-xio kernel module
+  ansible.builtin.import_tasks: build_kmod.yml
+  when: rocm_xio_kmod_install | bool
+  tags: [kmod]
+
+- name: Build the fio fork with the rocm_xio ioengine
+  ansible.builtin.import_tasks: build_fio.yml
+  tags: [fio, build]
+
+- name: Run a small rocm_xio fio smoke test
+  ansible.builtin.import_tasks: smoke_test.yml
+  when: rocm_xio_run_smoke_test | bool
+  tags: [smoke-test]

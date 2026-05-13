@@ -1,0 +1,15 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+---
+rocm_xio_hosts:
+  hosts:
+    xio-host-01:
+      ansible_host: 192.0.2.10
+      ansible_user: ubuntu
+  vars:
+    # Enable the smoke test only when a disposable namespace is available.
+    rocm_xio_run_smoke_test: false
+    # rocm_xio_smoke_filename: /dev/disk/by-id/nvme-MTR_SLC_16GB_0400000E3CBC
+    rocm_xio_offload_arch: native
+    fio_make_jobs: 8

@@ -1,0 +1,57 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+---
+# rocm-xio sources --------------------------------------------------------
+# Where to clone rocm-xio from, and which ref to build. Override with
+# rocm_xio_local_src to skip the clone and use an existing checkout.
+rocm_xio_repo: "https://github.com/ROCm/rocm-xio.git"
+rocm_xio_ref: "dev/stebates/nvme-ep-fio-api"
+rocm_xio_local_src: ""
+rocm_xio_src_dir: "/opt/src/rocm-xio"
+rocm_xio_build_dir: "{{ rocm_xio_src_dir }}/build"
+rocm_xio_install_prefix: "/opt/rocm"
+rocm_xio_offload_arch: "native"
+# Default to a static archive so the persistent NVMe API symbols (which are
+# not yet decorated with XIO_API) are visible to the fio shim. Set to true
+# only after rocm-xio exports the persistent session API in shared builds.
+rocm_xio_build_shared: false
+rocm_xio_build_clients: true
+rocm_xio_install_tester: true
+
+# rocm-xio kernel module --------------------------------------------------
+rocm_xio_kmod_install: true
+rocm_xio_kmod_load: true
+# Group that should own /dev/rocm-xio (matches the upstream udev rule).
+rocm_xio_device_group: "video"
+
+# fio fork ----------------------------------------------------------------
+fio_repo: "https://github.com/sbates130272/fio.git"
+fio_ref: "dev/batesste/rocm-xio-engine"
+fio_local_src: ""
+fio_src_dir: "/opt/src/fio-rocm-xio"
+fio_install_prefix: "/usr/local"
+fio_make_jobs: "{{ ansible_processor_vcpus | default(4) }}"
+# Pass through extra arguments to fio's ./configure step.
+fio_configure_extra_args: []
+
+# Package install ---------------------------------------------------------
+# When true, the role installs ROCm and build dependencies via apt. Disable
+# on hosts that already have a hand-tuned ROCm install.
+rocm_xio_install_packages: true
+
+# Smoke test --------------------------------------------------------------
+# When true, the role renders a minimal fio job and runs it as root. The
+# default block size, queue depth, and runtime are conservative so the test
+# is safe on any disposable namespace.
+rocm_xio_run_smoke_test: false
+rocm_xio_smoke_filename: ""              # e.g. /dev/disk/by-id/nvme-...
+rocm_xio_smoke_runtime: "5s"
+rocm_xio_smoke_iodepth: 32
+rocm_xio_smoke_queue_length: 64
+rocm_xio_smoke_block_size: "4k"
+rocm_xio_smoke_rw: "randread"            # safe default; never overwrite data
+rocm_xio_smoke_gpu_id: 0
+rocm_xio_smoke_memory_mode: 0
+rocm_xio_smoke_extra_env:
+  HSA_FORCE_FINE_GRAIN_PCIE: "1"
