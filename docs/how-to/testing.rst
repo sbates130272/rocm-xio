@@ -109,8 +109,14 @@ These run in CI without hardware:
 System tests
 ------------
 
-- ``test-ep-emulate`` -- Full SQE/CQE round-trip in emulation mode
-  (GPU required)
+- ``test-ep-emulate`` -- Library-level SQE/CQE round-trip in emulation mode
+- ``test-ep-cli-emulate`` through
+  ``test-ep-cli-emulate-doorbell-verify`` -- ``xio-tester test-ep``
+  emulation matrix (polling, doorbell, and verify)
+- ``test-ep-cli-reject-*`` -- Negative CLI checks for invalid emulate
+  configurations
+
+These tests run in emulation mode and do not require a GPU.
 
 Hardware tests
 --------------
@@ -464,7 +470,8 @@ The GitHub Actions workflows run tests as follows:
 - **build-check**: ``ctest -L "unit"`` -- CPU-only tests in a
   ``rocm/dev-ubuntu-24.04:7.2`` container (no GPU)
 - **test-emulate**: ``ctest -L "unit"`` plus
-  ``xio-tester test-ep --emulate`` (no GPU, emulation mode)
+  ``ctest -L "emulate"`` for the test-ep emulate matrix
+  (no GPU, emulation mode)
 
 Hardware and sweep tests are not run in CI -- they require physical
 NIC and GPU hardware.

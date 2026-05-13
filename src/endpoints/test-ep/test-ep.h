@@ -175,7 +175,9 @@ typedef struct test_cqe cqeType;
 std::vector<std::thread> launchCpuThreads(
   void* hostSqeAddr, void* hostCqeAddr, unsigned numThreads,
   unsigned iterations, long long delayNs, unsigned doorbell = 0,
-  void* doorbellAddr = nullptr, unsigned queueSize = 0);
+  void* doorbellAddr = nullptr, unsigned queueSize = 0,
+  bool doVerify = false, uint32_t baseSeed = 1, uint32_t* verifyPass = nullptr,
+  uint32_t* verifyFail = nullptr);
 
 /**
  * Run the test endpoint

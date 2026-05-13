@@ -9,11 +9,8 @@
  * the library API with a minimal configuration.
  */
 
-#include <cassert>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
 
 #include <hip/hip_runtime.h>
 
@@ -21,20 +18,27 @@
 #include "xio-test-assert.h"
 #include "xio.h"
 
-int test_emulate_roundtrip() {
-  const unsigned kIter = 10;
-  const unsigned kThreads = 1;
+int run_emulate_case(const char* name, unsigned iterations, unsigned threads,
+                     unsigned doorbell, bool verify) {
+  if (doorbell > 0 && threads > doorbell) {
+    fprintf(stderr, "%s: invalid case (threads > doorbell)\n", name);
+    return 1;
+  }
 
-  xio::XioEndpointConfig cfg(kIter, kThreads);
+  xio::XioEndpointConfig cfg(iterations, threads);
 
   xio::test_ep::TestEpConfig epCfg;
   epCfg.emulate = true;
   epCfg.enableCpuThreads = true;
-  epCfg.iterations = kIter;
+  epCfg.iterations = iterations;
+  epCfg.doorbell = doorbell;
+  epCfg.verify = verify;
+  epCfg.seed = 7;
   cfg.endpointConfig = &epCfg;
 
-  size_t sqSize = kThreads * sizeof(xio::test_ep::test_sqe);
-  size_t cqSize = kThreads * sizeof(xio::test_ep::test_cqe);
+  size_t queueLen = (doorbell > 0) ? doorbell : ((threads > 1) ? threads : 1);
+  size_t sqSize = queueLen * sizeof(xio::test_ep::test_sqe);
+  size_t cqSize = queueLen * sizeof(xio::test_ep::test_cqe);
 
   void *sq = nullptr, *cq = nullptr;
   hipError_t sq_err = xio::allocHostMemory(sqSize, &sq, "emulate SQ",
@@ -57,15 +61,28 @@ int test_emulate_roundtrip() {
   xio::freeHostMemory(cq, XIO_HOST_MEM_PLAIN);
 
   if (err != hipSuccess) {
-    fprintf(stderr, "test-ep emulate run failed: %d\n", static_cast<int>(err));
+    fprintf(stderr, "%s failed: %d\n", name, static_cast<int>(err));
     return 1;
   }
+
+  if (verify) {
+    unsigned expected = iterations * threads;
+    ASSERT_EQ(cfg.verifyPass, expected);
+    ASSERT_EQ(cfg.verifyFail, 0u);
+  } else {
+    ASSERT_EQ(cfg.verifyPass, 0u);
+    ASSERT_EQ(cfg.verifyFail, 0u);
+  }
+
   return 0;
 }
 
 int main() {
   int failures = 0;
-  failures += test_emulate_roundtrip();
+  failures += run_emulate_case("emulate-polling", 12, 1, 0, false);
+  failures += run_emulate_case("emulate-polling-verify", 8, 2, 0, true);
+  failures += run_emulate_case("emulate-doorbell", 16, 1, 64, false);
+  failures += run_emulate_case("emulate-doorbell-verify", 10, 4, 64, true);
 
   if (failures == 0) {
     printf("All test-ep emulate tests passed.\n");
