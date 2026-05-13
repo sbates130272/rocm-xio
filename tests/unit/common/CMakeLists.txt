@@ -19,6 +19,13 @@ xio_add_test(
 )
 
 xio_add_test(
+  NAME test-xio-env
+  SOURCE test-xio-env.hip
+  LABELS unit common
+  TIMEOUT 30
+)
+
+xio_add_test(
   NAME test-extract-endpoint
   SOURCE test-extract-endpoint.hip
   LABELS unit common
