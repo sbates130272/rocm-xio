@@ -6,6 +6,7 @@
  */
 
 #include <cstdint>
+#include <cstddef>
 #include <cstdio>
 #include <string>
 

@@ -134,7 +134,7 @@ int test_nvme_cli_rejects_non_power_of_two_queue_length() {
   bool threw = false;
   try {
     app.parse(args);
-  } catch (const CLI::ValidationError&) {
+  } catch (const CLI::ParseError&) {
     threw = true;
   }
 

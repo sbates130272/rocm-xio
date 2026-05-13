@@ -90,13 +90,17 @@ Unit tests (CPU-only)
 These run in CI without hardware:
 
 - ``test-data-pattern`` -- LFSR data pattern generation and verification
-- ``test-rdma-config`` -- ``RdmaEpConfig`` validation, ``Provider``
-  enum, ``provider_name()``, ``provider_from_string()`` (all vendors
-  including ROCM_ERNIC)
+- ``test-xio-env`` -- environment parsing and cached log-level helpers
+- ``test-xio-cli-options`` -- ``xio-tester`` CLI option registration,
+  validation, and SDMA subcommand detection
+- ``test-rdma-config`` -- ``RdmaEpConfig`` validation, ``Provider`` enum,
+  ``provider_name()``, ``provider_from_string()``, iteration handling, and
+  2-node validation
 - ``test-rdma-vendors`` -- Vendor ID constants, ``RmaDescriptor``,
   ``AmoDescriptor`` struct layout
-- ``test-rdma-endian`` -- Endian byte-swap helpers (host and
-  optional device)
+- ``test-rdma-endian`` -- Endian byte-swap helpers (host and optional device)
+- ``test-rdma-common`` -- Provider key normalization, RD atomic depth,
+  queue-pair init attributes, and backend config mapping
 - ``test-bnxt-sizing`` -- BNXT DV queue sizing math:
   ``roundup_pow2``, ``align_up``, ``calc_wqe_sz``, ``compute_sq``,
   ``compute_rq``, ``cqe_size``
@@ -104,7 +108,12 @@ These run in CI without hardware:
   ``ExtractBusNumber``, ``GetBusIdDistance``, ``GetLcaDepth``
 - ``test-extract-endpoint`` -- CLI argument parser:
   ``extractEndpointName()``
-- ``test-ep-config`` -- test-ep configuration defaults
+- ``test-nvme-config`` -- NVMe command/status constants and config defaults
+- ``test-nvme-helpers`` -- NVMe SQE/CQE helpers, PRP edge cases, and data
+  pattern verification
+- ``test-sdma-config`` -- SDMA endpoint config validation and host-visible
+  type defaults
+- ``test-ep-config`` -- test-ep configuration defaults and SQE/CQE layout
 
 System tests
 ------------
