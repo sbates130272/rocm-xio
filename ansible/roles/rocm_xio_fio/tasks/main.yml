@@ -1,0 +1,121 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Build and install rocm-xio, then build fio with --enable-rocm-xio.
+# Requires an AMD ROCm stack at rocm_path (e.g. rocm-hip-sdk on Ubuntu).
+
+- name: Ensure rocm-xio HIP compiler is present
+  ansible.builtin.command: "{{ rocm_path }}/bin/hipcc --version"
+  changed_when: false
+  failed_when: false
+  register: rocm_xio_fio_hipcc_check
+
+- name: Fail when ROCm hipcc is missing
+  ansible.builtin.fail:
+    msg: >
+      hipcc not found under {{ rocm_path }}/bin.
+      Install ROCm (e.g. rocm-hip-sdk) or set rocm_path.
+  when: rocm_xio_fio_hipcc_check.rc != 0
+
+- name: Install build dependencies (apt)
+  ansible.builtin.apt:
+    name: "{{ rocm_xio_fio_apt_packages }}"
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+
+- name: Create build parent directory
+  ansible.builtin.file:
+    path: "{{ rocm_xio_build_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Clone rocm-xio
+  ansible.builtin.git:
+    repo: "{{ rocm_xio_git_repo }}"
+    version: "{{ rocm_xio_git_ref }}"
+    dest: "{{ rocm_xio_src_dir }}"
+    force: false
+
+- name: Configure rocm-xio with CMake
+  vars:
+    rocm_xio_fio_cmake_argv: >-
+      {{
+        [rocm_path ~ '/bin/cmake',
+         '-S', rocm_xio_src_dir,
+         '-B', rocm_xio_src_dir ~ '/build',
+         '-GNinja',
+         '-DCMAKE_BUILD_TYPE=' ~ rocm_xio_cmake_build_type,
+         '-DCMAKE_INSTALL_PREFIX=' ~ rocm_xio_install_prefix,
+         '-DROCM_PATH=' ~ rocm_path,
+         '-DBUILD_TESTING=OFF']
+        + (['-DOFFLOAD_ARCH=' ~ rocm_xio_offload_arch] if (rocm_xio_offload_arch | default('') | length) > 0 else [])
+        + (rocm_xio_cmake_extra_args | default([]))
+      }}
+  ansible.builtin.command:
+    argv: "{{ rocm_xio_fio_cmake_argv }}"
+    creates: "{{ rocm_xio_src_dir }}/build/build.ninja"
+
+- name: Build rocm-xio
+  ansible.builtin.command:
+    argv:
+      - "{{ rocm_path }}/bin/cmake"
+      - "--build"
+      - "{{ rocm_xio_src_dir }}/build"
+      - "--parallel"
+      - "{{ fio_build_jobs | string }}"
+
+- name: Install rocm-xio into prefix
+  ansible.builtin.command:
+    argv:
+      - "{{ rocm_path }}/bin/cmake"
+      - "--install"
+      - "{{ rocm_xio_src_dir }}/build"
+  become: "{{ rocm_xio_fio_install_become | bool }}"
+
+- name: Clone ROCm fio fork (rocm_xio engine branch)
+  ansible.builtin.git:
+    repo: "{{ fio_git_repo }}"
+    version: "{{ fio_git_ref }}"
+    dest: "{{ fio_src_dir }}"
+    force: false
+
+- name: Configure fio with rocm-xio engine
+  ansible.builtin.shell: |
+    set -euo pipefail
+    export PATH="{{ rocm_path }}/bin:${PATH}"
+    export CXX="{{ rocm_path }}/bin/hipcc"
+    ./configure --prefix="{{ fio_install_prefix }}" \
+      --enable-rocm-xio \
+      --with-rocm-xio="{{ rocm_xio_install_prefix }}"
+  args:
+    chdir: "{{ fio_src_dir }}"
+    creates: "{{ fio_src_dir }}/config-host.mak"
+    executable: /bin/bash
+
+- name: Build fio
+  ansible.builtin.command:
+    argv:
+      - make
+      - "-j{{ fio_build_jobs }}"
+  args:
+    chdir: "{{ fio_src_dir }}"
+  environment:
+    PATH: "{{ rocm_path }}/bin:{{ ansible_env.PATH }}"
+
+- name: Check rocm_xio engine is registered
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if ./fio --enginelist 2>/dev/null | grep -q rocm_xio; then
+      exit 0
+    fi
+    if ./fio --show-engines 2>/dev/null | grep -q rocm_xio; then
+      exit 0
+    fi
+    exit 1
+  args:
+    chdir: "{{ fio_src_dir }}"
+    executable: /bin/bash
+  when: rocm_xio_fio_run_engine_list_check | bool
+  changed_when: false

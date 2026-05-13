@@ -1,0 +1,47 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Defaults for building rocm-xio and ROCm/fio with the rocm_xio engine.
+# Pair rocm_xio_git_ref (this repo) with fio_git_ref (ROCm/fio
+# dev/stebates/rocm-xio) so the persistent NVMe API matches the shim.
+
+rocm_xio_git_repo: "https://github.com/ROCm/rocm-xio.git"
+rocm_xio_git_ref: "dev/stebates/nvme-ep-fio-api"
+
+fio_git_repo: "https://github.com/ROCm/fio.git"
+fio_git_ref: "dev/stebates/rocm-xio"
+
+rocm_path: "/opt/rocm"
+rocm_xio_install_prefix: "{{ rocm_path }}"
+
+rocm_xio_build_dir: "/tmp/rocm-xio-ansible-build"
+rocm_xio_src_dir: "{{ rocm_xio_build_dir }}/rocm-xio-src"
+fio_src_dir: "{{ rocm_xio_build_dir }}/fio-src"
+
+rocm_xio_cmake_build_type: "Release"
+rocm_xio_cmake_extra_args:
+  - "-DBUILD_SHARED_LIBS=ON"
+  - "-DBUILD_CLIENTS=OFF"
+
+# Optional; omit or leave empty for CMake default HIP arch selection.
+rocm_xio_offload_arch: ""
+
+fio_install_prefix: "/usr/local"
+fio_build_jobs: "{{ ansible_processor_vcpus | default(4) }}"
+
+rocm_xio_fio_apt_packages:
+  - rocm-hip-sdk
+  - rocminfo
+  - cmake
+  - ninja-build
+  - git
+  - build-essential
+  - pkg-config
+  - libdrm-dev
+  - libhsa-runtime-dev
+
+rocm_xio_fio_run_engine_list_check: true
+
+# Use ansible become when installing into system prefixes such as /opt/rocm.
+rocm_xio_fio_install_become: true
