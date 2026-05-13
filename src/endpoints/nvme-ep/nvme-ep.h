@@ -105,9 +105,28 @@ struct nvmeBufferParams {
   uint32_t readNumPages;
   uint32_t writeNumPages;
   uint64_t* prpListPool;
+  uint64_t* prpListPageDmas;
   uint64_t prpListPoolDma;
   uint32_t prpEntriesPerCmd;
 };
+
+__host__ __device__ static inline uint32_t prpListEntriesPerPage() {
+  return NVME_PAGE_SIZE / sizeof(uint64_t);
+}
+
+__host__ __device__ static inline uint64_t prpListDmaForSlot(
+  const nvmeBufferParams& params, uint32_t slot) {
+  if (params.prpListPageDmas)
+    return params.prpListPageDmas[slot];
+  if (params.prpListPoolDma && params.prpEntriesPerCmd) {
+    uint32_t stride = params.prpEntriesPerCmd;
+    if (stride < prpListEntriesPerPage())
+      stride = prpListEntriesPerPage();
+    return params.prpListPoolDma +
+           (uint64_t)slot * stride * sizeof(uint64_t);
+  }
+  return 0;
+}
 
 /**
  * Persistent NVMe endpoint session options.
