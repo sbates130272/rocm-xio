@@ -1,0 +1,28 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+[global]
+ioengine=rocm_xio
+filename={{ fio_rocm_xio_test_filename }}
+rocm_xio_gpu_id={{ fio_rocm_xio_test_gpu_id }}
+rocm_xio_queue_length={{ fio_rocm_xio_test_queue_length }}
+rocm_xio_memory_mode={{ fio_rocm_xio_test_memory_mode }}
+rocm_xio_precompute_prps={{ fio_rocm_xio_test_precompute_prps | int }}
+rocm_xio_sq_batch_size={{ fio_rocm_xio_test_sq_batch_size }}
+rocm_xio_cq_batch_size={{ fio_rocm_xio_test_cq_batch_size }}
+direct=1
+thread=1
+iodepth={{ fio_rocm_xio_test_iodepth }}
+rw={{ fio_rocm_xio_test_rw }}
+bs={{ fio_rocm_xio_test_bs }}
+size={{ fio_rocm_xio_test_size }}
+group_reporting=1
+time_based=1
+runtime={{ fio_rocm_xio_test_runtime }}
+
+{% for queue_id in fio_rocm_xio_test_queue_ids %}
+[rocm_xio_queue_{{ queue_id }}]
+rocm_xio_queue_id={{ queue_id }}
+
+{% endfor %}

@@ -1,0 +1,54 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+fio_rocm_xio_install_build_deps: true
+fio_rocm_xio_build_deps:
+  - build-essential
+  - cmake
+  - git
+  - pkg-config
+  - zlib1g-dev
+  - libaio-dev
+  - libnuma-dev
+
+fio_rocm_xio_repo_url: "https://github.com/sbates130272/fio.git"
+fio_rocm_xio_branch: "dev/batesste/rocm-xio-engine"
+fio_rocm_xio_checkout_dir: "/opt/fio-rocm-xio"
+
+fio_rocm_xio_build_rocm_xio_from_source: true
+fio_rocm_xio_source_dir: "/workspace"
+fio_rocm_xio_build_dir: "/opt/rocm-xio-build"
+fio_rocm_xio_install_prefix: "/opt/rocs-ais"
+fio_rocm_xio_cmake_build_type: "Release"
+
+fio_rocm_xio_rocm_bin_dir: "/opt/rocm/bin"
+fio_rocm_xio_require_hipcc: true
+
+fio_rocm_xio_configure_extra_args: []
+fio_rocm_xio_make_jobs: "{{ ansible_processor_vcpus | default(4) }}"
+
+fio_rocm_xio_verify_engine_help: true
+fio_rocm_xio_generate_example_job: true
+fio_rocm_xio_example_job_path: "/tmp/rocm-xio-test.fio"
+fio_rocm_xio_parse_only_job: true
+fio_rocm_xio_run_hw_test: false
+
+fio_rocm_xio_test_filename: "/dev/disk/by-id/nvme-MTR_SLC_16GB_0400000E3CBC"
+fio_rocm_xio_test_gpu_id: 0
+fio_rocm_xio_test_queue_length: 256
+fio_rocm_xio_test_memory_mode: 0
+fio_rocm_xio_test_precompute_prps: true
+fio_rocm_xio_test_sq_batch_size: 255
+fio_rocm_xio_test_cq_batch_size: 31
+fio_rocm_xio_test_iodepth: 256
+fio_rocm_xio_test_rw: "randread"
+fio_rocm_xio_test_bs: "512"
+fio_rocm_xio_test_size: "100%"
+fio_rocm_xio_test_runtime: "10s"
+fio_rocm_xio_test_queue_ids:
+  - 28
+  - 29
+  - 30
+  - 31
+  - 32

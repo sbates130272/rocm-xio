@@ -1,0 +1,15 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+# Example overrides:
+# ansible-playbook playbooks/fio-rocm-xio-install-test.yml \
+#   -e @playbooks/fio-rocm-xio-vars.example.yml
+
+fio_rocm_xio_source_dir: "/workspace"
+fio_rocm_xio_install_prefix: "/opt/rocs-ais"
+fio_rocm_xio_checkout_dir: "/opt/fio-rocm-xio"
+
+fio_rocm_xio_test_filename: "/dev/disk/by-id/nvme-MTR_SLC_16GB_0400000E3CBC"
+fio_rocm_xio_test_memory_mode: 11
+fio_rocm_xio_run_hw_test: false

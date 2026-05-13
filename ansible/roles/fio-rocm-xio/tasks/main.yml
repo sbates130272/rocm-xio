@@ -1,0 +1,141 @@
+# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+#
+# SPDX-License-Identifier: MIT
+#
+- name: Install build dependencies
+  become: true
+  ansible.builtin.apt:
+    name: "{{ fio_rocm_xio_build_deps }}"
+    state: present
+    update_cache: true
+  when: fio_rocm_xio_install_build_deps
+
+- name: Check for HIP compiler
+  ansible.builtin.stat:
+    path: "{{ fio_rocm_xio_rocm_bin_dir }}/hipcc"
+  register: fio_rocm_xio_hipcc
+
+- name: Fail when HIP compiler is unavailable
+  ansible.builtin.fail:
+    msg: >
+      hipcc was not found at {{ fio_rocm_xio_rocm_bin_dir }}/hipcc. Install
+      ROCm first, then rerun this role.
+  when:
+    - fio_rocm_xio_require_hipcc
+    - not fio_rocm_xio_hipcc.stat.exists
+
+- name: Build environment for ROCm-XIO tasks
+  ansible.builtin.set_fact:
+    fio_rocm_xio_env:
+      PATH: "{{ fio_rocm_xio_rocm_bin_dir }}:{{ ansible_env.PATH }}"
+      LD_LIBRARY_PATH: >-
+        {{ fio_rocm_xio_install_prefix }}/lib:/opt/rocm/lib{{
+        ':' + ansible_env.LD_LIBRARY_PATH
+        if ansible_env.LD_LIBRARY_PATH is defined and
+        ansible_env.LD_LIBRARY_PATH | length > 0 else '' }}
+
+- name: Check rocm-xio source tree
+  ansible.builtin.stat:
+    path: "{{ fio_rocm_xio_source_dir }}/CMakeLists.txt"
+  register: fio_rocm_xio_source_tree
+  when: fio_rocm_xio_build_rocm_xio_from_source
+
+- name: Fail when rocm-xio source tree is missing
+  ansible.builtin.fail:
+    msg: >
+      rocm-xio source tree was not found at {{ fio_rocm_xio_source_dir }}.
+      Set fio_rocm_xio_source_dir to the rocm-xio checkout path.
+  when:
+    - fio_rocm_xio_build_rocm_xio_from_source
+    - not fio_rocm_xio_source_tree.stat.exists
+
+- name: Create rocm-xio build directory
+  become: true
+  ansible.builtin.file:
+    path: "{{ fio_rocm_xio_build_dir }}"
+    state: directory
+    mode: "0755"
+  when: fio_rocm_xio_build_rocm_xio_from_source
+
+- name: Configure rocm-xio build
+  ansible.builtin.command:
+    cmd: >-
+      cmake -S {{ fio_rocm_xio_source_dir }} -B {{ fio_rocm_xio_build_dir }}
+      -DCMAKE_BUILD_TYPE={{ fio_rocm_xio_cmake_build_type }}
+      -DCMAKE_INSTALL_PREFIX={{ fio_rocm_xio_install_prefix }}
+      -DBUILD_CLIENTS=ON
+  environment: "{{ fio_rocm_xio_env }}"
+  when: fio_rocm_xio_build_rocm_xio_from_source
+
+- name: Build rocm-xio
+  ansible.builtin.command:
+    cmd: "cmake --build {{ fio_rocm_xio_build_dir }} --parallel"
+  environment: "{{ fio_rocm_xio_env }}"
+  when: fio_rocm_xio_build_rocm_xio_from_source
+
+- name: Install rocm-xio
+  become: true
+  ansible.builtin.command:
+    cmd: "cmake --install {{ fio_rocm_xio_build_dir }}"
+  environment: "{{ fio_rocm_xio_env }}"
+  when: fio_rocm_xio_build_rocm_xio_from_source
+
+- name: Clone fio repository
+  become: true
+  ansible.builtin.git:
+    repo: "{{ fio_rocm_xio_repo_url }}"
+    dest: "{{ fio_rocm_xio_checkout_dir }}"
+    version: "{{ fio_rocm_xio_branch }}"
+    update: true
+
+- name: Configure fio with rocm-xio engine
+  ansible.builtin.command:
+    cmd: >-
+      ./configure --enable-rocm-xio
+      --with-rocm-xio={{ fio_rocm_xio_install_prefix }}
+      --cxx={{ fio_rocm_xio_rocm_bin_dir }}/hipcc
+      {{ fio_rocm_xio_configure_extra_args | join(' ') }}
+    chdir: "{{ fio_rocm_xio_checkout_dir }}"
+  environment: "{{ fio_rocm_xio_env }}"
+
+- name: Build fio
+  ansible.builtin.command:
+    cmd: "make -j{{ fio_rocm_xio_make_jobs }}"
+    chdir: "{{ fio_rocm_xio_checkout_dir }}"
+  environment: "{{ fio_rocm_xio_env }}"
+
+- name: Verify rocm_xio ioengine registration
+  ansible.builtin.command:
+    cmd: "./fio --enghelp=rocm_xio"
+    chdir: "{{ fio_rocm_xio_checkout_dir }}"
+  environment: "{{ fio_rocm_xio_env }}"
+  changed_when: false
+  when: fio_rocm_xio_verify_engine_help
+
+- name: Generate example rocm_xio fio job
+  ansible.builtin.template:
+    src: "rocm-xio-test.fio.j2"
+    dest: "{{ fio_rocm_xio_example_job_path }}"
+    mode: "0644"
+  when: fio_rocm_xio_generate_example_job
+
+- name: Parse example rocm_xio fio job
+  ansible.builtin.command:
+    cmd: "./fio --parse-only {{ fio_rocm_xio_example_job_path }}"
+    chdir: "{{ fio_rocm_xio_checkout_dir }}"
+  environment: "{{ fio_rocm_xio_env }}"
+  changed_when: false
+  when:
+    - fio_rocm_xio_generate_example_job
+    - fio_rocm_xio_parse_only_job
+
+- name: Run optional hardware smoke test job
+  become: true
+  ansible.builtin.command:
+    cmd: "./fio {{ fio_rocm_xio_example_job_path }}"
+    chdir: "{{ fio_rocm_xio_checkout_dir }}"
+  environment: "{{ fio_rocm_xio_env }}"
+  changed_when: false
+  when:
+    - fio_rocm_xio_generate_example_job
+    - fio_rocm_xio_run_hw_test
