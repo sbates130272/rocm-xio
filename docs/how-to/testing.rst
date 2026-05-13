@@ -70,6 +70,7 @@ Label         Definition
 ``stress``    Long-running (timeout: 600 seconds)
 ``rdma``      RDMA-related test
 ``common``    Common library utilities
+``scripts``   Shell-script syntax checks
 ``fixture``   CTest fixture (setup/teardown)
 ============  =========================================
 
@@ -104,7 +105,18 @@ These run in CI without hardware:
   ``ExtractBusNumber``, ``GetBusIdDistance``, ``GetLcaDepth``
 - ``test-extract-endpoint`` -- CLI argument parser:
   ``extractEndpointName()``
+- ``test-xio-env`` -- environment variable parsing helpers:
+  ``getEnvInt()`` and ``getEnvStr()``
+- ``test-xio-timing`` -- host-side ``XioTimingStats`` aggregation
+- ``test-tcp-exchange-layout`` -- two-node RDMA TCP exchange wire
+  layout and socket byte helpers
 - ``test-ep-config`` -- test-ep configuration defaults
+- ``test-sdma-config`` -- sdma-ep configuration defaults and
+  validation rules
+- ``test-sdma-packet-layout`` -- SDMA packet sizes, offsets, and
+  opcode constants
+- ``test-script-*`` -- ``bash -n`` syntax checks for build, test,
+  udev, and DKMS helper scripts
 
 System tests
 ------------
