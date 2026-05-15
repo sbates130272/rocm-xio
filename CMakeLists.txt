@@ -212,6 +212,8 @@ message(STATUS "CMAKE_HIP_ARCHITECTURES: ${CMAKE_HIP_ARCHITECTURES}")
 # OSS7.0 SDMA targets use different packet structures than
 # pre-OSS7 (CDNA3 / MI300X).  Extend this list when new
 # OSS7.0 architectures land (e.g. MI450 / CDNA5).
+# Client APUs (gfx1150 / gfx1151, etc.) remain pre-OSS7 unless
+# AMD documents otherwise for a specific gfx target.
 set(_SDMA_OSS7_TARGETS "gfx950")
 string(REGEX MATCH "gfx[0-9a-f]+" _BARE_ARCH
        "${OFFLOAD_ARCH}")
