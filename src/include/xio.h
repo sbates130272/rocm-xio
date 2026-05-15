@@ -833,10 +833,10 @@ __host__ __device__ static inline void ringDoorbell(
 /**
  * @brief Ring a doorbell with aggressive ISA-level fencing.
  *
- * On RDNA 2/3 GPUs (gfx10xx / gfx11xx), emits explicit
- * s_waitcnt + s_waitcnt_vscnt drains, a global_store_dword
- * with GLC|SLC|DLC flags to bypass caches, and full GL0/GL1
- * cache invalidation.
+ * On RDNA 2/3 and RDNA 3.5 client GPUs (gfx10xx / gfx11xx
+ * including gfx115x Ryzen AI APUs), emits explicit s_waitcnt +
+ * s_waitcnt_vscnt drains, a global_store_dword with GLC|SLC|DLC
+ * flags to bypass caches, and full GL0/GL1 cache invalidation.
  *
  * On RDNA 4 GPUs (gfx12xx), uses the restructured GFX12
  * wait instructions (s_wait_kmcnt, s_wait_loadcnt,
@@ -866,7 +866,7 @@ __host__ __device__ static inline void ringDoorbellFenced(
                : "memory");
   __threadfence_system();
 #elif __gfx1010__ || __gfx1030__ || __gfx1031__ || __gfx1032__ ||              \
-  __gfx1100__ || __gfx1101__ || __gfx1102__
+  __gfx1100__ || __gfx1101__ || __gfx1102__ || __gfx1150__ || __gfx1151__
   asm volatile("s_waitcnt lgkmcnt(0) vmcnt(0) \n"
                "s_waitcnt_vscnt null, 0x0 \n"
                "global_store_dword %0, %1, off glc slc dlc \n"

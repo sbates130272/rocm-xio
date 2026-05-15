@@ -60,6 +60,9 @@ CMake configuration options
    # Specify GPU architecture (auto-detected if not specified)
    cmake -S . -B build -DOFFLOAD_ARCH=gfx942:xnack+
 
+   # RDNA 3.5 Ryzen AI APUs (e.g. gfx1150 Strix, gfx1151 Strix Halo)
+   cmake -S . -B build -DOFFLOAD_ARCH=gfx1151
+
    # Specify ROCm installation path (default: /opt/rocm)
    cmake -S . -B build -DROCM_PATH=/opt/rocm-7.1.0
 
@@ -72,6 +75,10 @@ CMake configuration options
 
    # Build documentation as part of a normal ROCm XIO build
    cmake -S . -B build -DXIO_BUILD_DOCS=ON
+
+When ``rocminfo`` lists more than one GPU, set ``OFFLOAD_ARCH`` to the gfx
+name of the APU (or pass a semicolon-separated list for fat device binaries)
+so HIP device code matches the silicon you run on.
 
 CMake build targets
 -------------------

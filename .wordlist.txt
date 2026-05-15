@@ -167,6 +167,9 @@ CDNA
 Radeon
 radeon
 RDNA
+APU
+APUs
+Strix
 ROCm
 rocm
 rocs

@@ -5,7 +5,7 @@
 
 export DH_VERBOSE = 1
 
-DEB_OFFLOAD_ARCH ?= gfx908:xnack+;gfx90a:xnack+;gfx942:xnack+;gfx950:xnack+;gfx1201
+DEB_OFFLOAD_ARCH ?= gfx908:xnack+;gfx90a:xnack+;gfx942:xnack+;gfx950:xnack+;gfx1150;gfx1151;gfx1201
 ROCM_PATH        ?= /opt/rocm
 XIO_MAJOR := $(shell sed -n \
   's/^set(ROCM_XIO_LIBRARY_MAJOR \([0-9]*\))/\1/p' \
