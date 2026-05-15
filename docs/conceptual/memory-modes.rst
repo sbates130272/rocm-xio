@@ -347,6 +347,18 @@ ROCm XIO deliberately removed this abstraction (see
 internals"). ROCm XIO uses a single-endpoint model with no symmetric
 heap, making a full allocator hierarchy unnecessary.
 
+APUs and unified memory
+-----------------------
+
+The model in this page assumes a discrete AMD GPU with a dedicated
+VRAM aperture exposed as a separate HSA region. AMD APUs (Strix
+Halo, Strix Point, Phoenix, etc.) do not match that model: their
+GPU agent reports a single CPU-attached fine-grained pool, no VRAM
+BAR, and ``hipDeviceProp_t::integrated`` is non-zero. The proposed
+extension of the allocator, dmabuf, and kernel module paths needed
+to make ROCm XIO first-class on APUs is described separately in
+:ref:`apu-support`.
+
 Upstream tracking
 -----------------
 

@@ -25,6 +25,8 @@ subtrees:
   entries:
   - file: conceptual/memory-modes
     title: Memory modes, allocation, and coherence
+  - file: conceptual/apu-support
+    title: APU support design proposal
 
 - caption: Reference
   entries:

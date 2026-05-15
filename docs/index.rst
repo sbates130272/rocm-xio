@@ -31,6 +31,7 @@ IO operations to hardware devices without CPU intervention.
   .. grid-item-card:: Conceptual
 
     * :doc:`Memory modes, allocation, and coherence <conceptual/memory-modes>`
+    * :doc:`APU support design proposal <conceptual/apu-support>`
 
   .. grid-item-card:: Reference
 
